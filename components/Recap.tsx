@@ -9,8 +9,28 @@ export type RecapMode = "note" | "tip" | "breath";
 
 /** 이 시간 안에 질문이 오면 회고 화면을 아예 보여주지 않는다 */
 export const RECAP_DELAY = 300;
-/** 한번 보였으면 최소 이만큼은 보여준다 (깜빡임 방지) */
-export const RECAP_MIN_SHOW = 800;
+/** 한번 보였으면 최소 이만큼은 보여준다 (회고할 시간) */
+export const RECAP_MIN_SHOW = 2500;
+/** 회고 화면이 사라지는 시간 (부드럽게 흐려지며 다음 질문으로) */
+export const RECAP_FADE_OUT = 350;
+/** 노트를 스크롤하다 손을 뗀 뒤 이만큼 더 기다렸다 넘어간다 (관성 스크롤까지 끝나게) */
+export const RECAP_SCROLL_GRACE = 700;
+
+/** 사용자가 노트를 보고 있는지: 누르고 있거나(down) 최근에 스크롤했으면(until까지) 다음 질문으로 넘기지 않는다 */
+export type RecapActivity = { down: boolean; until: number };
+export function recapBusy(a: RecapActivity) {
+  return a.down || Date.now() < a.until;
+}
+/** 노트에서 일어난 일: 누름(down) / 뗌(up) / 스크롤(scroll) */
+export type RecapActivityEvent = "down" | "up" | "scroll";
+/** 받은 이벤트로 RecapActivity를 갱신 (Nadap이 자기 ref에 적용) */
+export function applyRecapActivity(a: RecapActivity, e: RecapActivityEvent) {
+  if (e === "down") a.down = true;
+  else {
+    if (e === "up") a.down = false;
+    a.until = Date.now() + RECAP_SCROLL_GRACE;
+  }
+}
 
 const WAIT_TEXT = "당신에게 맞는 질문을 고르는 중이에요…";
 
@@ -46,16 +66,30 @@ function Typewriter({ text, instant }: { text: string; instant: boolean }) {
 
 export type RecapItem = { question: string; answer: string };
 
-function Note({ answers, compact, reduce }: { answers: RecapItem[]; compact: boolean; reduce: boolean }) {
+function Note({
+  answers,
+  compact,
+  reduce,
+  onActivity,
+}: {
+  answers: RecapItem[];
+  compact: boolean;
+  reduce: boolean;
+  onActivity: (e: RecapActivityEvent) => void;
+}) {
   // 지금까지의 질문과 답 전부. 칸 안에서 스크롤되고, 처음엔 맨 아래(방금 답)가 보이게
   const boxRef = useRef<HTMLOListElement>(null);
   const [scrollable, setScrollable] = useState(false);
+  const autoScroll = useRef(false);
   useEffect(() => {
     const el = boxRef.current;
     if (!el) return;
+    autoScroll.current = true; // 코드로 맨 아래로 내린 건 "사용자가 보는 중"으로 치지 않는다
     el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => (autoScroll.current = false));
     setScrollable(el.scrollHeight > el.clientHeight + 4);
   }, [answers.length]);
+
 
   return (
     <div className="rounded-[16px] border border-line bg-surface px-3 pt-4 pb-3">
@@ -67,6 +101,15 @@ function Note({ answers, compact, reduce }: { answers: RecapItem[]; compact: boo
         ref={boxRef}
         tabIndex={0}
         aria-label="지금까지의 질문과 답"
+        onPointerDown={() => onActivity("down")}
+        onPointerUp={() => onActivity("up")}
+        onPointerCancel={() => onActivity("up")}
+        onTouchStart={() => onActivity("down")}
+        onTouchEnd={() => onActivity("up")}
+        onWheel={() => onActivity("scroll")}
+        onScroll={() => {
+          if (!autoScroll.current) onActivity("scroll");
+        }}
         className={`flex flex-col gap-2.5 overflow-y-auto overscroll-contain rounded-[12px] ${
           compact ? "max-h-[28dvh]" : "max-h-[46dvh]"
         }`}
@@ -122,11 +165,15 @@ export function RecapLoading({
   answers,
   tip,
   onVisible,
+  leaving,
+  onActivity,
 }: {
   mode: RecapMode;
   answers: RecapItem[]; // 지금까지의 질문과 답 (오래된 것 → 방금 고른 것)
   tip: string | null;
   onVisible: () => void;
+  leaving: boolean; // 다음 질문이 준비돼 사라지는 중
+  onActivity: (e: RecapActivityEvent) => void;
 }) {
   const [show, setShow] = useState(false);
   const reduce = usePrefersReducedMotion();
@@ -144,13 +191,22 @@ export function RecapLoading({
   if (!show) return null;
 
   return (
-    <div aria-busy="true" aria-live="polite" className="animate-[nadap-fade_300ms_ease-out]">
+    <div
+      aria-busy="true"
+      aria-live="polite"
+      className="animate-[nadap-in_450ms_ease-out] transition-[opacity,transform] ease-in"
+      style={{
+        transitionDuration: `${RECAP_FADE_OUT}ms`,
+        opacity: leaving ? 0 : 1,
+        transform: leaving ? "translateY(-8px)" : undefined,
+      }}
+    >
       {mode === "breath" ? (
         <Breath reduce={reduce} />
       ) : (
         <>
           <p className="mb-2 text-[14px] font-medium text-blue">지금까지 들은 이야기</p>
-          <Note answers={answers} compact={mode === "tip"} reduce={reduce} />
+          <Note answers={answers} compact={mode === "tip"} reduce={reduce} onActivity={onActivity} />
           {mode === "tip" && tip && (
             <div className="mt-3 rounded-[16px] border-[1.5px] border-blue/40 px-5 py-4">
               <p className="mb-1.5 text-[13px] font-bold text-blue">당신의 성향 한 조각</p>

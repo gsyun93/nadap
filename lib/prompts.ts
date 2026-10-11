@@ -2,7 +2,7 @@
 import { AGES, FOCUS, MBTI_NICK, Q1, Q2, REL, TONES } from "./data";
 import { questionLimits } from "./flow";
 import { calcAge, calcSaju, type SajuResult } from "./saju";
-import { mbtiTraits, sajuTraits } from "./traits";
+import { mbtiTraits, sajuTraits, weakElement } from "./traits";
 import type { Answer, Profile, QA } from "./types";
 
 export function answerText(a: Answer, options: readonly string[]): string {
@@ -157,6 +157,17 @@ export function buildResultPrompt(p: Profile, history: QA[], tone: number): stri
   }
   const sajuPart = sajuTraits(saju);
   const mbtiPart = mbtiTraits(p.mbti);
+  const weak = weakElement(saju);
+  // 생년월일을 넣었으면 "이번 주 해볼 것" 3번은 사주에서 부족한 기운을 채우는 행동
+  const todoGuide = weak
+    ? `- 작고 구체적인 행동 + 이 사람의 어떤 기운·성향 때문에 맞는지 짧은 이유
+- 작고 구체적인 행동 + 이 사람의 어떤 기운·성향 때문에 맞는지 짧은 이유
+- ${weak.name} 기운을 채우는 생활 속 작은 행동 + 이유
+1·2번은 고민에 바로 쓰는 행동이야. 행동은 강한 기운·MBTI 강점을 살리는 쪽으로 골라.
+3번은 반드시 "${weak.name} 기운이 ${weak.missing ? "없어서" : "적어서"}"로 시작해서, 그 기운이 부족해 지금 고민에서 생기는 어려움을 한 문장으로 짚고, 그 기운을 채우는 이번 주 행동 하나를 줘. 행동은 이 방향 안에서 골라: ${weak.hint}. 3개만.`
+    : `- 작고 구체적인 행동 + 이 사람의 어떤 성향 때문에 맞는지 짧은 이유
+- 작고 구체적인 행동 + 이 사람의 어떤 성향 때문에 맞는지 짧은 이유
+행동은 MBTI 강점을 살리는 쪽으로 골라. 2개만.`;
 
   return `너는 고민 상담 앱 '나답'의 상담가야. 아래 정보를 바탕으로 이 사람만을 위한 답을 써.
 
@@ -186,9 +197,7 @@ ${qaLines(history)}
 ## 나답의 답
 이 사람의 성향을 담은 한 문장 결론을 쓰고, 그다음 줄에 근거 줄을 써. 누구에게나 할 수 있는 말이 아니라 이 성향이라서 하는 말이어야 해.
 ## 이번 주 해볼 것
-- 작고 구체적인 행동 + 이 사람의 어떤 기운·성향 때문에 맞는지 짧은 이유
-- 작고 구체적인 행동 + 이 사람의 어떤 기운·성향 때문에 맞는지 짧은 이유
-행동은 부족한 기운을 채우거나 강한 기운·MBTI 강점을 살리는 쪽으로 골라. 2개만.
+${todoGuide}
 
 규칙: 해요체. 초등학생도 한 번에 읽히게 문장은 짧게. 한자, 사주 용어(일간, 오행, 비겁, 시주 같은 말), 어려운 단어 금지. 기운은 나무·불·흙·쇠·물 같은 자연 말로만. MBTI 유형명(INFP 등)은 전체에서 한두 번만. 사주는 성향 참고로만 쓰고 운명을 단정하지 마. 의학적 진단 금지. 전화번호나 외부 기관 안내는 넣지 말고, 이 대화 안에서 위로와 방법을 충분히 줘.`;
 }

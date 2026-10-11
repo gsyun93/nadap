@@ -18,12 +18,21 @@ import {
 import { fixedCount, limitsFromFixed, needsRel, progressPercent, shouldFinish } from "@/lib/flow";
 import { answerText, buildQuestionPrompt, concernText, mindText } from "@/lib/prompts";
 import { calcAge, calcSaju, type BirthInput } from "@/lib/saju";
-import { traitTips } from "@/lib/traits";
+import { traitTips, weakElement } from "@/lib/traits";
 import { branchKey, loadBranch, TREE_DEPTH, treeFocus } from "@/lib/tree";
 import type { Answer, GeneratedQuestion, Profile, QA } from "@/lib/types";
 import { Logo } from "./Logo";
 import { BirthFormScreen, EMPTY_BIRTH_FORM, MbtiGrid, ResultCards, type BirthForm } from "./screens";
-import { isHeavyAnswer, RECAP_MIN_SHOW, RecapLoading, type RecapMode } from "./Recap";
+import {
+  isHeavyAnswer,
+  RECAP_FADE_OUT,
+  RECAP_MIN_SHOW,
+  applyRecapActivity,
+  recapBusy,
+  RecapLoading,
+  type RecapActivity,
+  type RecapMode,
+} from "./Recap";
 import { ChoiceList, Header, PrimaryButton, QuestionTitle } from "./ui";
 
 type Screen =
@@ -116,6 +125,10 @@ export default function Nadap() {
   const recap = useRef({ waits: 0, tipCursor: 0, lastBreath: -10 });
   const [recapPlan, setRecapPlan] = useState<{ i: number; mode: RecapMode; tip: string | null } | null>(null);
   const recapShownAt = useRef<number | null>(null);
+  // 노트를 누르거나 스크롤하는 중인지 (보는 중이면 다음 질문으로 넘기지 않는다)
+  const recapActivity = useRef<RecapActivity>({ down: false, until: 0 });
+  // 회고 화면이 부드럽게 사라지는 중
+  const [recapLeaving, setRecapLeaving] = useState(false);
 
   const push = useCallback((sc: Screen) => {
     navToken.current++;
@@ -181,11 +194,26 @@ export default function Nadap() {
       const usedTexts = new Set(state.custom.map((c) => c.q.question));
 
       /** 회고 화면이 떴다면 최소 시간은 보여준 뒤 다음 질문으로 */
+      /**
+       * 회고 화면이 떴다면: 최소 2.5초 보여주고, 노트를 보는(스크롤하는) 중이면 끝날 때까지 기다린 뒤,
+       * 부드럽게 흐려지며 다음 질문으로 넘어간다
+       */
       const reveal = (fn: () => void) => {
-        const at = recapShownAt.current;
-        const wait = at === null ? 0 : Math.max(0, RECAP_MIN_SHOW - (Date.now() - at));
-        if (wait === 0) return fn();
-        setTimeout(() => navToken.current === token && fn(), wait);
+        const tryNow = () => {
+          if (navToken.current !== token) return;
+          const at = recapShownAt.current;
+          if (at === null) return fn(); // 회고 화면이 뜨기 전에 준비됨
+          const wait = RECAP_MIN_SHOW - (Date.now() - at);
+          if (wait > 0) return void setTimeout(tryNow, wait);
+          if (recapBusy(recapActivity.current)) return void setTimeout(tryNow, 200);
+          setRecapLeaving(true);
+          setTimeout(() => {
+            if (navToken.current !== token) return;
+            setRecapLeaving(false);
+            fn();
+          }, RECAP_FADE_OUT);
+        };
+        tryNow();
       };
 
       const applyFallback = () => {
@@ -242,6 +270,8 @@ export default function Nadap() {
       } else if (r.waits % 3 === 2 && tips.length > 0) mode = "tip";
       const tip = mode === "tip" ? tips[r.tipCursor++ % tips.length] : null;
       recapShownAt.current = null;
+      recapActivity.current = { down: false, until: 0 };
+      setRecapLeaving(false);
       setRecapPlan({ i: i + 1, mode, tip });
     },
     [tips],
@@ -507,7 +537,8 @@ export default function Nadap() {
     case "custom": {
       const item = s.custom[screen.i];
       body = item ? (
-        <>
+        // 질문은 살짝 떠오르듯 부드럽게 나타난다
+        <div className="animate-[nadap-in_400ms_ease-out]">
           <QuestionTitle title={item.q.question} />
           <ChoiceList
             options={item.q.options}
@@ -515,7 +546,7 @@ export default function Nadap() {
             onSelect={(a) => answerCustom(screen.i, a)}
             allowCustom
           />
-        </>
+        </div>
       ) : (
         <RecapLoading
           mode={recapPlan?.i === screen.i ? recapPlan.mode : "note"}
@@ -524,6 +555,8 @@ export default function Nadap() {
           onVisible={() => {
             recapShownAt.current = Date.now();
           }}
+          leaving={recapLeaving}
+          onActivity={(e) => applyRecapActivity(recapActivity.current, e)}
         />
       );
       break;
@@ -655,8 +688,11 @@ function ResultScreen({
   const mind = mindText(profile);
   if (mind) chips.push(mind);
   if (profile.mbti) chips.push(profile.mbti.code);
+  let boostLabel: string | null = null;
   if (profile.birth) {
     const saju = calcSaju(profile.birth);
+    const weak = weakElement(saju);
+    if (weak) boostLabel = `${weak.name} 기운 채우기`;
     chips.push(`일간 ${saju.dayGanLabel}`);
     chips.push(`${calcAge(saju.solar).korean}세`);
   } else if (profile.ageBand !== null) {
@@ -688,7 +724,7 @@ function ResultScreen({
           답을 정리하고 있어요… 길면 30초쯤 걸려요
         </div>
       )}
-      <ResultCards text={text} />
+      <ResultCards text={text} boostLabel={boostLabel} />
       {(status === "rate" || status === "error") && (
         <div className="mt-4 rounded-[16px] border border-line px-5 py-5 text-center" role="alert">
           <p className="text-[15px]">

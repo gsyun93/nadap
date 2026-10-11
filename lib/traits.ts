@@ -130,3 +130,23 @@ export function traitTips(saju: SajuResult | null, mbti: { code: string } | null
   if (mbti) for (const l of mbti.code.split("")) if (MBTI_TIP[l]) tips.push(MBTI_TIP[l]);
   return tips;
 }
+
+// ── 이번 주 해볼 것 3번: 사주에서 부족한 기운 채우기 ──
+const ELEMENT_NAME: Record<Element, string> = { 목: "나무", 화: "불", 토: "흙", 금: "쇠", 수: "물" };
+
+/** 부족한 기운을 채우는 생활 속 방향 (AI가 이 안에서 구체적인 행동을 고른다) */
+const BOOST_HINT: Record<Element, string> = {
+  목: "새로 시작하고 자라나는 힘. 작은 일을 하나 새로 시작하기, 아침 산책, 식물 돌보기, 배우고 싶은 걸 10분 해보기",
+  화: "드러내고 표현하는 힘. 마음을 말이나 글로 꺼내기, 햇볕 쬐기, 땀나는 운동, 좋아하는 사람에게 먼저 연락하기",
+  토: "중심을 잡고 버티는 힘. 같은 시간에 자고 먹기, 하루 루틴 하나 지키기, 주변 정리, 믿는 사람과 꾸준히 만나기",
+  금: "정리하고 끊어내는 힘. 할 일 줄이기, 거절 한 번 해보기, 마감 정하기, 필요 없는 것 버리기",
+  수: "쉬고 흘려보내는 힘. 아무것도 안 하는 시간 갖기, 물 자주 마시기, 자기 전 일기로 생각 흘려보내기, 물가 걷기",
+};
+
+/** 가장 부족한 기운 (없는 기운이 있으면 그것, 아니면 가장 적은 기운). 사주 정보가 없으면 null */
+export function weakElement(saju: SajuResult | null): { element: Element; name: string; missing: boolean; hint: string } | null {
+  if (!saju) return null;
+  const min = Math.min(...ELEMENTS.map((e) => saju.elements[e]));
+  const e = ELEMENTS.find((x) => saju.elements[x] === min)!;
+  return { element: e, name: ELEMENT_NAME[e], missing: min === 0, hint: BOOST_HINT[e] };
+}

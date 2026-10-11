@@ -432,7 +432,8 @@ function splitAction(text: string): [string, string] {
   return m ? [m[1], m[2]] : [text, ""];
 }
 
-export function ResultCards({ text }: { text: string }) {
+/** boostLabel: 생년월일을 넣었을 때 "이번 주 해볼 것" 3번(부족한 기운 채우기)에 붙일 이름 (예: "물 기운 채우기") */
+export function ResultCards({ text, boostLabel }: { text: string; boostLabel?: string | null }) {
   return (
     <div className="flex flex-col gap-3">
       {parseCards(text).map((c, i) => {
@@ -464,7 +465,10 @@ export function ResultCards({ text }: { text: string }) {
               ))}
               <ol className="flex flex-col gap-3">
                 {items.map((it, j) => {
-                  const [action, reason] = splitAction(it);
+                  // 3번(사주 보완)은 "○ 기운이 없어서 … 어려움." 다음에 행동이 와서, 행동을 굵게 앞에 보여준다
+                  const boost = j === 2 && !!boostLabel;
+                  const [first, rest] = splitAction(it);
+                  const [action, reason] = boost && rest ? [rest, first] : [first, rest];
                   return (
                     <li
                       key={j}
@@ -477,6 +481,11 @@ export function ResultCards({ text }: { text: string }) {
                         {j + 1}
                       </span>
                       <div className="min-w-0">
+                        {boost && (
+                          <span className="mb-1.5 inline-block rounded-full bg-sub px-2.5 py-0.5 text-[12px] font-bold text-bg">
+                            사주 보완 · {boostLabel}
+                          </span>
+                        )}
                         <p className="text-[17px] leading-[1.5] font-bold">
                           {action}
                         </p>
