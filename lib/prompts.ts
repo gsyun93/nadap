@@ -1,7 +1,8 @@
 // 프롬프트 템플릿 (기획서 8-4, 9번 그대로). 화면(캐시 키)과 서버(실제 호출)가 같은 함수를 쓴다.
 import { AGES, FOCUS, MBTI_NICK, Q1, Q2, REL, TONES } from "./data";
 import { questionLimits } from "./flow";
-import { calcAge, calcSaju } from "./saju";
+import { calcAge, calcSaju, type SajuResult } from "./saju";
+import { mbtiTraits, sajuTraits } from "./traits";
 import type { Answer, Profile, QA } from "./types";
 
 export function answerText(a: Answer, options: readonly string[]): string {
@@ -116,28 +117,46 @@ ${prev ? qaLines([prev]) : "(아직 없음)"}
 JSON만 답해: {"question":"...","options":["...","...","...","..."],"focus":"...","last":false}`;
 }
 
-/** 결과 생성 프롬프트 */
+/** 결과 생성 프롬프트. 사주·MBTI 성향 풀이(코드로 계산)를 함께 넘겨 네 카드 모두에 녹이게 한다 */
 export function buildResultPrompt(p: Profile, history: QA[], tone: number): string {
+  let saju: SajuResult | null = null;
+  try {
+    saju = p.birth ? calcSaju(p.birth) : null;
+  } catch {
+    saju = null;
+  }
+  const sajuPart = sajuTraits(saju);
+  const mbtiPart = mbtiTraits(p.mbti);
+
   return `너는 고민 상담 앱 '나답'의 상담가야. 아래 정보를 바탕으로 이 사람만을 위한 답을 써.
 
 [사용자 정보]
 ${userInfoBlock(p)}
+
+[성향 풀이 재료] (사주·MBTI를 미리 풀어둔 참고값. 이 안에서만 해석하고 새로 지어내지 마)
+사주: ${sajuPart ? `
+${sajuPart}` : "정보 없음"}
+MBTI: ${mbtiPart ? `
+${mbtiPart}` : "정보 없음"}
 
 [질문과 답]
 ${qaLines(history)}
 
 [원하는 말투] ${TONES[tone]?.instruction ?? TONES[0].instruction}
 
+가장 중요한 원칙: 네 부분 모두 "고른 답"과 "타고난 성향(사주·MBTI)"을 엮어서 써. 답만 요약하면 안 되고, 이 사람의 성향 때문에 이 고민이 왜 이렇게 생겼는지, 그래서 이 사람에게는 어떤 방법이 맞는지까지 이어줘. 성향은 위 [성향 풀이 재료]에 있는 내용만 근거로 써.
+
 형식: 아래 4개 제목을 정확히 이 순서로 쓰고, 다른 마크다운(굵게, 표, 다른 제목)은 쓰지 마.
 ## 나는 이런 사람
-사주로 먼저 시작해. 일간과 오행을 자연 이야기로 쉽게 풀어줘(예: 단단한 흙 같은 사람, 물 기운이 적어서 쉬는 걸 잘 못해요). 그다음 MBTI 성향을 한 문장으로 이어. 초등학생도 한 번에 읽히게: 한자, 사주 용어(일간, 오행, 비겁 같은 말), 어려운 단어 금지, 문장은 짧게, 3문장 이내. 사주 정보가 없으면 MBTI와 나이대로만 써.
+사주로 먼저 시작해. 타고난 바탕과 많거나 없는 기운을 자연 이야기로 쉽게 풀어줘(예: 단단한 흙 같은 사람, 물 기운이 적어서 쉬는 걸 잘 못해요). 그다음 MBTI 성향을 한 문장으로 이어. 마지막에 그 성향이 지금 고민과 어떻게 닿아 있는지 한 문장. 4문장 이내. 사주 정보가 없으면 MBTI와 나이대로만 써.
 ## 고민의 진짜 이유
-고른 답들을 엮어 3~4문장. 사용자가 고른 표현을 자연스럽게 녹여.
+고른 답들을 엮어 3~4문장. 사용자가 고른 표현을 자연스럽게 녹이되, 각 답 뒤에 있는 성향을 짚어줘(예: 참고 버틴다는 답 → 혼자 짊어지는 성향, 남의 이야기를 들어주는 게 좋았다는 답 → 마음을 먼저 살피는 성향). 성향 이야기는 최소 두 번 나와야 해.
 ## 나답의 답
-한 문장 결론.
+이 사람의 성향을 담은 한 문장 결론. 누구에게나 할 수 있는 말이 아니라 이 성향이라서 하는 말이어야 해.
 ## 이번 주 해볼 것
-- 작고 구체적인 행동
-- 작고 구체적인 행동
+- 작고 구체적인 행동 + 이 사람의 성향에 왜 맞는지 짧은 이유
+- 작고 구체적인 행동 + 이 사람의 성향에 왜 맞는지 짧은 이유
+행동은 부족한 기운을 채우거나 강한 기운·MBTI 강점을 살리는 쪽으로 골라. 2개만.
 
-규칙: 해요체. 사주는 성향 참고로만 쓰고 운명을 단정하지 마. 의학적 진단 금지. 전화번호나 외부 기관 안내는 넣지 말고, 이 대화 안에서 위로와 방법을 충분히 줘.`;
+규칙: 해요체. 초등학생도 한 번에 읽히게 문장은 짧게. 한자, 사주 용어(일간, 오행, 비겁, 시주 같은 말), 어려운 단어 금지. 기운은 나무·불·흙·쇠·물 같은 자연 말로만. MBTI 유형명(INFP 등)은 전체에서 한두 번만. 사주는 성향 참고로만 쓰고 운명을 단정하지 마. 의학적 진단 금지. 전화번호나 외부 기관 안내는 넣지 말고, 이 대화 안에서 위로와 방법을 충분히 줘.`;
 }
