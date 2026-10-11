@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+/* ── 컬러 토큰 (라이트) ── */
+:root {
+  --c-blue: #1e5bff;      /* 메인: 선택된 보기, 버튼, 진행 바 */
+  --c-deep: #0e2b85;      /* 서브: "나" 말풍선, 로고 "나" */
+  --c-on-deep: #ffffff;   /* 딥블루 위 글자/기호 */
+  --c-bg: #ffffff;        /* 배경 */
+  --c-surface: #f4f6fc;   /* 결과 카드, 진행 바 바탕 */
+  --c-line: #dce2f2;      /* 테두리 */
+  --c-text: #0f1630;      /* 본문 글자 */
+  --c-sub: #5a6380;       /* 보조 글자 */
+}
+
+/* ── 다크 모드 ── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-blue: #4d7dff;
+    --c-deep: #9db6ff;
+    --c-on-deep: #0b1020;
+    --c-bg: #0b1020;
+    --c-surface: #141b33;
+    --c-line: #26304f;
+    --c-text: #eef1fa;
+    --c-sub: #a3acc8;
+  }
+}
+
+@theme inline {
+  --color-blue: var(--c-blue);
+  --color-deep: var(--c-deep);
+  --color-on-deep: var(--c-on-deep);
+  --color-bg: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-line: var(--c-line);
+  --color-text: var(--c-text);
+  --color-sub: var(--c-sub);
+  --font-sans: var(--font-plex), "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  background: var(--c-bg);
+}
+
+body {
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-sans);
+  min-height: 100dvh;
+  overflow-x: hidden;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+input,
+select,
+label {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* 아이폰 자동 확대 방지: 입력·선택 글자 16px 이상 */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+/* 키보드 포커스 표시 */
+:focus-visible {
+  outline: 2px solid var(--c-blue);
+  outline-offset: 2px;
+}
+
+/* 질문 제목 줄바꿈 균형 */
+.text-balance {
+  text-wrap: balance;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
