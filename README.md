@@ -15,6 +15,8 @@ npm run dev                  # http://localhost:3000
 npm test                     # 사주·나이 계산 단위 테스트
 ```
 
+맞춤 질문 1~4번째는 질문 트리에서 꺼내고(AI 호출 없음), 5번째부터 AI가 만든다. 고민·마음을 직접 썼거나 트리 질문에 직접 쓴 답을 하면 그다음부터 AI로 넘어간다.
+
 API 키가 비어 있어도 화면은 끝까지 돌아간다. 이때는 예비 질문(FALLBACK)과 예시 결과를 쓴다.
 
 ## 환경변수 (`.env.local`, Vercel 환경변수)
@@ -74,6 +76,8 @@ lib/data.ts                  고정 문구 전부
 lib/saju.ts                  사주·나이 계산 (+ saju.test.ts)
 lib/prompts.ts               프롬프트 템플릿
 lib/flow.ts                  질문 개수·진행률 계산
+lib/tree.ts, lib/tree/*.json 맞춤 질문 1~4번째 질문 트리 (고민 12갈래, 고른 갈래만 불러옴)
+scripts/build-tree.mjs       트리 원본 JSON → lib/tree/ 갈래별 파일 (node scripts/build-tree.mjs <원본 경로>)
 lib/ai.ts                    AI 호출 래퍼 (질문용·결과용 분리)
 lib/server-utils.ts          입력 검증, IP 기준 호출 제한 (질문 분당 60회 / 결과 분당 3회)
 components/Logo.tsx          로고 SVG (글자 로고, 앱 아이콘)

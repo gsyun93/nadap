@@ -17,6 +17,7 @@ import {
 import { fixedCount, limitsFromFixed, needsRel, progressPercent, shouldFinish } from "@/lib/flow";
 import { answerText, buildQuestionPrompt, concernText, mindText } from "@/lib/prompts";
 import { calcAge, calcSaju, type BirthInput } from "@/lib/saju";
+import { branchKey, loadBranch, TREE_DEPTH, treeFocus } from "@/lib/tree";
 import type { Answer, GeneratedQuestion, Profile, QA } from "@/lib/types";
 import { Logo } from "./Logo";
 import { BirthFormScreen, EMPTY_BIRTH_FORM, MbtiGrid, ResultCards, type BirthForm } from "./screens";
@@ -35,7 +36,8 @@ type Screen =
   | { t: "tone" }
   | { t: "result" };
 
-type CustomItem = { q: GeneratedQuestion; fallback: boolean; ans: Answer | null };
+/** node: 질문 트리에서 꺼낸 질문이면 그 노드 id */
+type CustomItem = { q: GeneratedQuestion; fallback: boolean; ans: Answer | null; node?: string };
 
 type State = {
   q1: Answer | null;
@@ -163,6 +165,7 @@ export default function Nadap() {
     const item = s.custom[screen.i];
     if (!item) return;
     if (shouldFinish(screen.i, item.q.last, limits, item.fallback)) return;
+    if (item.node && screen.i + 1 < TREE_DEPTH) return; // 다음 질문은 트리에서 꺼낸다
     const base = historyOf(s.custom, screen.i - 1);
     item.q.options.forEach((opt) => {
       requestQuestion(profile, [...base, { question: item.q.question, answer: opt, focus: item.q.focus }], true)?.catch(
@@ -171,14 +174,11 @@ export default function Nadap() {
     });
   }, [screen, s.custom, profile, limits, requestQuestion]);
 
-  /** 맞춤 질문 i번째 다음 질문을 준비해서 i+1 화면으로 */
-  const goNextCustom = useCallback(
-    (state: State, i: number) => {
+  /** 맞춤 질문 i번째 다음 질문을 AI로 만든다 (실패하면 예비 질문) */
+  const fillNextFromAI = useCallback(
+    (state: State, i: number, token: number) => {
       const p = toProfile(state);
       if (!p) return;
-      push({ t: "custom", i: i + 1 });
-      if (state.custom[i + 1]) return; // 이미 만들어져 있음 (뒤로 갔다가 같은 답)
-      const token = navToken.current;
       const history = historyOf(state.custom, i);
       const usedTexts = new Set(state.custom.map((c) => c.q.question));
 
@@ -214,7 +214,41 @@ export default function Nadap() {
       };
       attempt(0);
     },
-    [push, requestQuestion],
+    [requestQuestion],
+  );
+
+  /** 맞춤 질문 i번째 다음 질문을 준비해서 i+1 화면으로 */
+  const goNextCustom = useCallback(
+    (state: State, i: number) => {
+      push({ t: "custom", i: i + 1 });
+      if (state.custom[i + 1]) return; // 이미 만들어져 있음 (뒤로 갔다가 같은 답)
+      const token = navToken.current;
+      const item = state.custom[i];
+
+      // 1~4번째는 질문 트리에서 꺼낸다 (보기로 답했을 때만, 직접 쓰면 그다음부터 AI)
+      const key = branchKey(state.q1, state.q2);
+      const nodeId = item?.node;
+      if (key && nodeId && item.ans?.kind === "option" && i + 1 < TREE_DEPTH) {
+        const ansIndex = item.ans.index;
+        loadBranch(key).then(
+          (branch) => {
+            if (navToken.current !== token) return;
+            const childId = branch.nodes[nodeId]?.n?.[ansIndex];
+            const child = childId ? branch.nodes[childId] : undefined;
+            if (!childId || !child) return fillNextFromAI(state, i, token);
+            const q: GeneratedQuestion = { question: child.q, options: child.o, focus: treeFocus(i + 1), last: false };
+            setS((cur) => ({
+              ...cur,
+              custom: [...cur.custom.slice(0, i + 1), { q, fallback: false, ans: null, node: childId }],
+            }));
+          },
+          () => fillNextFromAI(state, i, token),
+        );
+        return;
+      }
+      fillNextFromAI(state, i, token);
+    },
+    [push, fillNextFromAI],
   );
 
   // ── 답 처리 ──
@@ -232,6 +266,9 @@ export default function Nadap() {
     let next = s;
     if (!sameAnswer(s.q2, a)) next = resetCustom({ ...s, q2: a, rel: null });
     setS(next);
+    // 고른 갈래의 질문 트리를 미리 불러둔다 (MBTI·생년월일 고르는 동안 받아짐)
+    const key = branchKey(next.q1, a);
+    if (key) loadBranch(key).catch(() => {});
     push(needsRel({ q1: next.q1!, q2: a }) ? { t: "rel" } : { t: "mbti" });
   };
 
@@ -269,7 +306,8 @@ export default function Nadap() {
     if (st.custom.length === 0 && st.q1) {
       const first =
         st.q1.kind === "custom" || st.q2?.kind !== "option" ? FIRST_CUSTOM : FIRST[st.q1.index][st.q2.index];
-      st = { ...st, custom: [{ q: asFixed(first), fallback: false, ans: null }] };
+      const key = branchKey(st.q1, st.q2);
+      st = { ...st, custom: [{ q: asFixed(first), fallback: false, ans: null, node: key ? `${key}-0` : undefined }] };
     }
     setS(st);
     push({ t: "custom", i: 0 });
