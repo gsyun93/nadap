@@ -68,6 +68,8 @@ const INITIAL: State = {
 };
 
 class RateLimitError extends Error {}
+/** 한 번에 4개 만들기가 실패했거나 그 보기 자리가 비어 있음 → 1개씩 다시 요청 */
+class PrefetchMiss extends Error {}
 
 const sameAnswer = (a: Answer | null, b: Answer | null) => JSON.stringify(a) === JSON.stringify(b);
 const asFixed = (f: FixedQuestion, last = false): GeneratedQuestion => ({ ...f, options: [...f.options], last });
@@ -159,20 +161,62 @@ export default function Nadap() {
   const profile = useMemo(() => toProfile(s), [s]);
   const limits = useMemo(() => (profile ? limitsFromFixed(fixedCount(profile)) : { min: 8, max: 12 }), [profile]);
 
-  // 질문이 화면에 뜨는 순간, 보기 4개 각각을 골랐을 때의 다음 질문을 미리 요청
+  /**
+   * 보기 4개 각각을 골랐을 때의 다음 질문을 AI 호출 1번으로 한꺼번에 미리 만든다.
+   * 결과는 보기별로 나눠 캐시에 넣어서(키 = 그 보기를 골랐을 때의 프롬프트 전체 문자열), 고르는 순간 바로 꺼내 쓴다.
+   */
+  const prefetchBatch = useCallback((profile: Profile, base: QA[], cur: GeneratedQuestion) => {
+    if (prefetchOff.current) return;
+    const missing = cur.options
+      .map((opt, i) => ({
+        i,
+        key: buildQuestionPrompt(profile, [...base, { question: cur.question, answer: opt, focus: cur.focus }]),
+      }))
+      .filter(({ key }) => !cache.current.has(key));
+    if (missing.length === 0) return;
+
+    const batch = fetch("/api/question", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        profile,
+        history: base,
+        current: { question: cur.question, options: cur.options, focus: cur.focus },
+      }),
+    }).then(async (r) => {
+      if (r.status === 429) prefetchOff.current = true;
+      if (!r.ok) throw new PrefetchMiss();
+      return ((await r.json()) as { questions: (GeneratedQuestion | null)[] }).questions;
+    });
+
+    for (const { i, key } of missing) {
+      const p = batch.then(
+        (list) => {
+          const q = list?.[i];
+          if (!q) throw new PrefetchMiss();
+          return q;
+        },
+        () => {
+          throw new PrefetchMiss();
+        },
+      );
+      cache.current.set(key, p);
+      // 실패하면 캐시에서 지워, 그 보기를 고를 때 1개씩 다시 요청하게
+      p.catch(() => {
+        if (cache.current.get(key) === p) cache.current.delete(key);
+      });
+    }
+  }, []);
+
+  // 질문이 화면에 뜨는 순간, 보기 4개 각각을 골랐을 때의 다음 질문을 미리 요청 (호출 1번)
   useEffect(() => {
     if (screen.t !== "custom" || !profile) return;
     const item = s.custom[screen.i];
     if (!item) return;
     if (shouldFinish(screen.i, item.q.last, limits, item.fallback)) return;
     if (item.node && screen.i + 1 < TREE_DEPTH) return; // 다음 질문은 트리에서 꺼낸다
-    const base = historyOf(s.custom, screen.i - 1);
-    item.q.options.forEach((opt) => {
-      requestQuestion(profile, [...base, { question: item.q.question, answer: opt, focus: item.q.focus }], true)?.catch(
-        () => {},
-      );
-    });
-  }, [screen, s.custom, profile, limits, requestQuestion]);
+    prefetchBatch(profile, historyOf(s.custom, screen.i - 1), item.q);
+  }, [screen, s.custom, profile, limits, prefetchBatch]);
 
   /** 맞춤 질문 i번째 다음 질문을 AI로 만든다 (실패하면 예비 질문) */
   const fillNextFromAI = useCallback(
@@ -206,6 +250,8 @@ export default function Nadap() {
           },
           (err) => {
             if (navToken.current !== token) return;
+            // 미리 만들기가 비었으면 이 보기 하나만 바로 다시 요청
+            if (err instanceof PrefetchMiss) return attempt(n);
             if (err instanceof RateLimitError && n < 3) {
               setTimeout(() => navToken.current === token && attempt(n + 1), 2500 * (n + 1));
             } else applyFallback();

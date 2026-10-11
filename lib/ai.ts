@@ -91,30 +91,58 @@ const QUESTION_JSON_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-/** 질문용 모델 호출 → 파싱된 JSON (검증은 호출하는 쪽에서). 회사 쪽 일시 오류(5xx)면 한 번 더 시도 */
-export async function generateQuestionJSON(prompt: string): Promise<unknown> {
+/** 보기 4개 각각의 다음 질문을 한 번에: {"next":[질문 ×4]} */
+const BATCH_JSON_SCHEMA = {
+  type: "object",
+  properties: { next: { type: "array", items: QUESTION_JSON_SCHEMA } },
+  required: ["next"],
+  additionalProperties: false,
+} as const;
+
+const GEMINI_QUESTION_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    question: { type: Type.STRING },
+    options: { type: Type.ARRAY, items: { type: Type.STRING } },
+    focus: { type: Type.STRING },
+    last: { type: Type.BOOLEAN },
+  },
+  required: ["question", "options", "focus", "last"],
+};
+const GEMINI_BATCH_SCHEMA = {
+  type: Type.OBJECT,
+  properties: { next: { type: Type.ARRAY, items: GEMINI_QUESTION_SCHEMA } },
+  required: ["next"],
+};
+
+/**
+ * 질문용 모델 호출 → 파싱된 JSON (검증은 호출하는 쪽에서). 회사 쪽 일시 오류(5xx)면 한 번 더 시도
+ * batch = true면 다음 질문 4개를 한 번에 ({"next":[...]})
+ */
+export async function generateQuestionJSON(prompt: string, batch = false): Promise<unknown> {
   try {
-    return await generateQuestionOnce(prompt);
+    return await generateQuestionOnce(prompt, batch);
   } catch (err) {
-    if (err instanceof AIError && err.serverError) return generateQuestionOnce(prompt);
+    if (err instanceof AIError && err.serverError) return generateQuestionOnce(prompt, batch);
     throw err;
   }
 }
 
-async function generateQuestionOnce(prompt: string): Promise<unknown> {
+async function generateQuestionOnce(prompt: string, batch: boolean): Promise<unknown> {
   const c = getConfig("QUESTION");
   if (!c) throw new AIError("no_key");
+  const timeout = batch ? 30_000 : 20_000;
   try {
     let text = "";
     if (c.provider === "anthropic") {
-      const res = await anthropic(c, 20_000, 0).messages.create({
+      const res = await anthropic(c, timeout, 0).messages.create({
         model: c.model,
-        max_tokens: 1024,
+        max_tokens: batch ? 3000 : 1024,
         // Haiku는 생각하기를 꺼서 빠르게, 그 외 모델은 생각하기를 끌 수 없어 노력 수준을 낮춘다
         ...(c.model.includes("haiku") ? { thinking: { type: "disabled" as const } } : {}),
         output_config: {
           ...(c.model.includes("haiku") ? {} : { effort: "low" as const }),
-          format: { type: "json_schema", schema: QUESTION_JSON_SCHEMA },
+          format: { type: "json_schema", schema: batch ? BATCH_JSON_SCHEMA : QUESTION_JSON_SCHEMA },
         },
         messages: [{ role: "user", content: prompt }],
       });
@@ -125,24 +153,15 @@ async function generateQuestionOnce(prompt: string): Promise<unknown> {
         contents: prompt,
         config: {
           responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              question: { type: Type.STRING },
-              options: { type: Type.ARRAY, items: { type: Type.STRING } },
-              focus: { type: Type.STRING },
-              last: { type: Type.BOOLEAN },
-            },
-            required: ["question", "options", "focus", "last"],
-          },
+          responseSchema: batch ? GEMINI_BATCH_SCHEMA : GEMINI_QUESTION_SCHEMA,
           // Gemini 3 이상은 생각하기를 최소로 (속도 우선)
           ...(/gemini-[3-9]/.test(c.model) ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : {}),
-          abortSignal: AbortSignal.timeout(20_000),
+          abortSignal: AbortSignal.timeout(timeout),
         },
       });
       text = res.text ?? "";
     } else {
-      const res = await openai(c, 20_000, 0).chat.completions.create({
+      const res = await openai(c, timeout, 0).chat.completions.create({
         model: c.model,
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
@@ -152,7 +171,7 @@ async function generateQuestionOnce(prompt: string): Promise<unknown> {
     return JSON.parse(stripFence(text));
   } catch (err) {
     if (err instanceof SyntaxError) throw new AIError("bad_json");
-    throw toAIError(err, "question");
+    throw toAIError(err, batch ? "question-batch" : "question");
   }
 }
 

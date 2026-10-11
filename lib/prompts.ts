@@ -117,6 +117,54 @@ ${prev ? qaLines([prev]) : "(아직 없음)"}
 JSON만 답해: {"question":"...","options":["...","...","...","..."],"focus":"...","last":false}`;
 }
 
+/**
+ * 보기 4개 각각을 골랐을 때의 다음 질문 4개를 한 번에 만드는 프롬프트 (미리 만들기용, 호출 1번)
+ * history = 지금 화면 질문 이전까지의 Q/A, current = 지금 화면에 떠 있는 질문
+ */
+export function buildBatchQuestionPrompt(
+  p: Profile,
+  history: QA[],
+  current: { question: string; options: string[]; focus: string },
+): string {
+  const { min, max } = questionLimits(p);
+  const n = history.length + 2; // 만들 질문의 번호 (지금 질문 다음)
+  const covered = [...history.map((h) => h.focus), current.focus].filter(Boolean);
+  const optionLines = current.options.map((o, i) => `보기${i + 1}: ${o}`).join("\n");
+
+  return `너는 고민 상담 앱 '나답'의 상담가야. 한 사람의 고민 하나를 끝까지 파고드는 대화를 하고 있어. 지금 이 사람에게 아래 [지금 질문]을 보여주고 있어. 이 사람이 보기 1~4 중 무엇을 고를지 모르니, 각 보기를 골랐을 경우의 다음 질문을 하나씩, 총 4개 미리 만들어.
+
+[이 사람의 핵심 고민] ${coreConcern(p)}
+
+[사용자 정보]
+${userInfoBlock(p)}
+
+[지금까지의 대화]
+${history.length ? qaLines(history) : "(아직 없음)"}
+
+[지금 질문]
+Q: ${current.question}
+${optionLines}
+
+[진행] 맞춤 질문 ${n}번째를 만드는 중 (최소 ${min}개, 최대 ${max}개). 이미 다룬 측면: ${covered.length ? covered.join(", ") : "없음"}
+참고할 측면: ${FOCUS.join(" / ")}
+
+가장 중요한 규칙:
+- next[0]은 보기1을, next[1]은 보기2를, next[2]는 보기3을, next[3]은 보기4를 골랐다고 가정한 다음 질문이야. 순서를 꼭 지켜.
+- 각 질문은 그 보기를 직전 답으로 이어받아, 그 답이 왜 그런지, 구체적으로 어떤 건지 한 단계 더 들어가. 고른 답이 다르니 네 질문도 각 답에 맞게 달라야 해.
+- 모든 질문은 반드시 핵심 고민과 직접 이어져야 해. 핵심 고민과 상관없는 일반적인 인생 질문은 금지.
+- 질문만 읽어도 이 사람의 고민과 이전 답을 기억하고 있다는 게 느껴지게 해. 예: 앞에서 '1년 넘게 미뤘다'고 했다면 '1년 동안 미루게 만든 건 뭐였어요?'처럼.
+
+형식 규칙 (next의 각 항목마다):
+- question: 말 거는 해요체, 30자 이내. 앞에서 물은 걸 반복하지 마.
+- options: 이 사람이 속으로 할 법한 반말 혼잣말 4개, 각 22자 이내, 서로 겹치지 않게, 그 보기와 핵심 고민 맥락에 맞는 현실적인 내용.
+- 나이대, 성별, MBTI 성향, 사주 기운은 보기 내용에 은근히만 반영. MBTI 유형명, 사주 용어, 따옴표, 이모지 금지.
+- 판단하거나 훈계하는 말 금지.
+- focus: 그 질문이 다루는 측면을 짧게.
+- last: 핵심 고민에 대해 충분히 파악됐으면 true. ${min}번째 전에는 항상 false.
+
+JSON만 답해: {"next":[{"question":"...","options":["...","...","...","..."],"focus":"...","last":false}, (보기2용), (보기3용), (보기4용)]}`;
+}
+
 /** 결과 생성 프롬프트. 사주·MBTI 성향 풀이(코드로 계산)를 함께 넘겨 네 카드 모두에 녹이게 한다 */
 export function buildResultPrompt(p: Profile, history: QA[], tone: number): string {
   let saju: SajuResult | null = null;

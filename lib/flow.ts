@@ -23,9 +23,13 @@ export function needsRel(p: Pick<Profile, "q1" | "q2">): boolean {
   );
 }
 
-/** 맞춤 질문 최소·최대 개수 */
+/** 전체 질문 수(고정 질문 포함) 목표: 최소 15개, 최대 25개 */
+export const TOTAL_MIN = 15;
+export const TOTAL_MAX = 25;
+
+/** 맞춤 질문 최소·최대 개수 (+1은 마지막 "듣고 싶은 말") */
 export function limitsFromFixed(f: number): { min: number; max: number } {
-  return { min: Math.max(8, 20 - (f + 1)), max: Math.max(12, 30 - (f + 1)) };
+  return { min: Math.max(8, TOTAL_MIN - (f + 1)), max: Math.max(12, TOTAL_MAX - (f + 1)) };
 }
 
 export function questionLimits(p: Profile): { min: number; max: number } {
