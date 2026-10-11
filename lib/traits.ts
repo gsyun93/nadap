@@ -82,19 +82,39 @@ export function mbtiTraits(mbti: { code: string; estimated: boolean } | null): s
 // ── 이번 주 해볼 것 3번: 사주에서 부족한 기운 채우기 ──
 const ELEMENT_NAME: Record<Element, string> = { 목: "나무", 화: "불", 토: "흙", 금: "쇠", 수: "물" };
 
-/** 부족한 기운을 채우는 생활 속 방향 (AI가 이 안에서 구체적인 행동을 고른다) */
-const BOOST_HINT: Record<Element, string> = {
-  목: "새로 시작하고 자라나는 힘. 작은 일을 하나 새로 시작하기, 아침 산책, 식물 돌보기, 배우고 싶은 걸 10분 해보기",
-  화: "드러내고 표현하는 힘. 마음을 말이나 글로 꺼내기, 햇볕 쬐기, 땀나는 운동, 좋아하는 사람에게 먼저 연락하기",
-  토: "중심을 잡고 버티는 힘. 같은 시간에 자고 먹기, 하루 루틴 하나 지키기, 주변 정리, 믿는 사람과 꾸준히 만나기",
-  금: "정리하고 끊어내는 힘. 할 일 줄이기, 거절 한 번 해보기, 마감 정하기, 필요 없는 것 버리기",
-  수: "쉬고 흘려보내는 힘. 아무것도 안 하는 시간 갖기, 물 자주 마시기, 자기 전 일기로 생각 흘려보내기, 물가 걷기",
+/**
+ * 부족한 기운을 곁에 두는 것으로 채우는 방향 (물건·색·공간 + 곁에 둘 사람).
+ * 오행에서 흔히 쓰는 보완 방법이고, AI는 이 안에서 고른다.
+ */
+const BOOST_HINT: Record<Element, { things: string; people: string }> = {
+  목: {
+    things: "초록색 소품, 책상 위 작은 화분이나 식물, 나무 소재 물건(나무 컵·원목 소품), 창가처럼 해 드는 자리",
+    people: "새로운 걸 같이 해보자고 끌어주는 활기찬 사람",
+  },
+  화: {
+    things: "빨강·주황 소품, 따뜻한 조명이나 캔들, 햇볕 잘 드는 자리, 밝은 색 옷",
+    people: "잘 웃고 감정 표현이 풍부한 밝은 사람",
+  },
+  토: {
+    things: "노랑·베이지·갈색 소품, 도자기나 흙 소재 물건(머그잔·화분), 폭신한 쿠션이나 담요, 깔끔하게 정돈된 자리",
+    people: "묵묵히 믿어주는 듬직하고 한결같은 사람",
+  },
+  금: {
+    things: "흰색·은색 소품, 금속 물건(손목시계·은 액세서리), 칸이 나뉜 정리함, 군더더기 없는 책상",
+    people: "결단력 있고 선을 분명하게 그어주는 사람, 냉정하게 조언해주는 사람",
+  },
+  수: {
+    things: "검정·남색 소품, 물병이나 가습기·작은 수조처럼 물과 관련된 물건, 물가가 보이는 자리, 푸른 계열 침구",
+    people: "차분하게 끝까지 들어주는 여유로운 사람",
+  },
 };
 
 /** 가장 부족한 기운 (없는 기운이 있으면 그것, 아니면 가장 적은 기운). 사주 정보가 없으면 null */
-export function weakElement(saju: SajuResult | null): { element: Element; name: string; missing: boolean; hint: string } | null {
+export function weakElement(
+  saju: SajuResult | null,
+): { element: Element; name: string; missing: boolean; things: string; people: string } | null {
   if (!saju) return null;
   const min = Math.min(...ELEMENTS.map((e) => saju.elements[e]));
   const e = ELEMENTS.find((x) => saju.elements[x] === min)!;
-  return { element: e, name: ELEMENT_NAME[e], missing: min === 0, hint: BOOST_HINT[e] };
+  return { element: e, name: ELEMENT_NAME[e], missing: min === 0, ...BOOST_HINT[e] };
 }
