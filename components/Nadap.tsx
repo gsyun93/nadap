@@ -478,8 +478,12 @@ function StartScreen({ onStart }: { onStart: () => void }) {
       <div className="flex flex-1 flex-col items-center justify-center text-center">
         <Logo size={72} />
         <h1 className="mt-10 text-[28px] font-bold text-balance">나를 찾는 답</h1>
-        <p className="mt-3 max-w-[320px] text-[16px] leading-relaxed text-balance text-sub">
-          고민 하나를 고르면, 나에게 맞춘 질문이 이어져요. 성향과 사주까지 함께 봐요.
+        <p className="mt-3 text-[16px] leading-relaxed text-sub">
+          고민 하나를 고르면
+          <br />
+          나에게 맞춘 질문이 이어져요
+          <br />
+          성향과 사주까지 반영해 답을 찾아드려요
         </p>
       </div>
       <PrimaryButton onClick={onStart}>시작하기</PrimaryButton>

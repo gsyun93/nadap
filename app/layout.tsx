@@ -11,7 +11,7 @@ const plex = IBM_Plex_Sans_KR({
 
 export const metadata: Metadata = {
   title: "나답 — 나를 찾는 답",
-  description: "고민 하나를 고르면, 나에게 맞춘 질문이 이어져요. 성향과 사주까지 함께 봐요.",
+  description: "고민 하나를 고르면 나에게 맞춘 질문이 이어져요. 성향과 사주까지 반영해 답을 찾아드려요.",
   applicationName: "나답",
   appleWebApp: { capable: true, title: "나답", statusBarStyle: "default" },
 };
