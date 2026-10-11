@@ -3,7 +3,7 @@
 //  - note:   상담가 노트에 지금까지의 답이 적히고, 방금 고른 답이 한 글자씩 써진다
 //  - tip:    노트 + 사주·MBTI "성향 한 조각"
 //  - breath: 무거운 답 다음에 숨 고르기
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 export type RecapMode = "note" | "tip" | "breath";
 
@@ -47,18 +47,41 @@ function Typewriter({ text, instant }: { text: string; instant: boolean }) {
 export type RecapItem = { question: string; answer: string };
 
 function Note({ answers, compact, reduce }: { answers: RecapItem[]; compact: boolean; reduce: boolean }) {
-  // 질문과 답을 한 쌍으로. 공간을 위해 최근 것만 (성향 조각이 함께 나올 땐 2쌍, 아니면 3쌍)
-  const shown = answers.slice(compact ? -2 : -3);
+  // 지금까지의 질문과 답 전부. 칸 안에서 스크롤되고, 처음엔 맨 아래(방금 답)가 보이게
+  const boxRef = useRef<HTMLOListElement>(null);
+  const [scrollable, setScrollable] = useState(false);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    setScrollable(el.scrollHeight > el.clientHeight + 4);
+  }, [answers.length]);
+
   return (
-    <div className="rounded-[16px] border border-line bg-surface px-4 py-4">
-      <p className="mb-3 px-1 text-[13px] font-bold text-blue">상담가 노트</p>
-      <ol className="flex flex-col gap-2.5">
-        {shown.map((item, i) => {
-          const latest = i === shown.length - 1;
+    <div className="rounded-[16px] border border-line bg-surface px-3 pt-4 pb-3">
+      <div className="mb-2 flex items-baseline justify-between px-1">
+        <p className="text-[13px] font-bold text-blue">상담가 노트</p>
+        {scrollable && <p className="text-[12px] text-sub">위로 올리면 지난 이야기가 보여요</p>}
+      </div>
+      <ol
+        ref={boxRef}
+        tabIndex={0}
+        aria-label="지금까지의 질문과 답"
+        className={`flex flex-col gap-2.5 overflow-y-auto overscroll-contain rounded-[12px] ${
+          compact ? "max-h-[28dvh]" : "max-h-[46dvh]"
+        }`}
+        style={{
+          // 위쪽이 잘린 게 보이도록 살짝 흐리게
+          maskImage: scrollable ? "linear-gradient(to bottom, transparent 0, black 28px)" : undefined,
+          WebkitMaskImage: scrollable ? "linear-gradient(to bottom, transparent 0, black 28px)" : undefined,
+        }}
+      >
+        {answers.map((item, i) => {
+          const latest = i === answers.length - 1;
           return (
             <li
               key={i}
-              className={`rounded-[12px] px-3.5 py-3 ${latest ? "border-[1.5px] border-blue bg-bg" : "bg-bg/60"}`}
+              className={`shrink-0 rounded-[12px] px-3.5 py-3 ${latest ? "border-[1.5px] border-blue bg-bg" : "bg-bg/60"}`}
             >
               <p className={`text-[13px] leading-[1.45] ${latest ? "text-blue" : "text-sub"}`}>
                 <span aria-hidden className="mr-1 font-bold">

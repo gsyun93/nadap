@@ -218,10 +218,11 @@ export function BirthFormScreen({
           />
         </Row>
 
-        <Row label="달력">
+        <Row label="달력" muted>
           <div className="flex gap-2">
             <div className="min-w-0 flex-1">
               <Segmented
+                tone="secondary"
                 label="양력 음력"
                 value={form.calendar}
                 onChange={(calendar) =>
@@ -243,7 +244,7 @@ export function BirthFormScreen({
                 onClick={() => set({ leap: !form.leap })}
                 className={`h-12 shrink-0 rounded-[12px] border-[1.5px] px-3.5 text-[15px] font-medium transition-colors ${
                   form.leap
-                    ? "border-blue bg-blue text-white"
+                    ? "border-sub bg-sub text-bg"
                     : "border-line text-sub active:bg-surface"
                 }`}
               >
@@ -346,10 +347,10 @@ export function BirthFormScreen({
 }
 
 /** 왼쪽 항목 이름 + 오른쪽 입력 한 줄 */
-function Row({ label, children }: { label: string; children: ReactNode }) {
+function Row({ label, children, muted = false }: { label: string; children: ReactNode; muted?: boolean }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="w-12 shrink-0 text-[15px] font-bold text-text">
+      <span className={`w-12 shrink-0 text-[15px] ${muted ? "font-medium text-sub" : "font-bold text-text"}`}>
         {label}
       </span>
       <div className="min-w-0 flex-1">{children}</div>
@@ -363,12 +364,17 @@ function Segmented<T extends string>({
   value,
   options,
   onChange,
+  tone = "primary",
 }: {
   label: string;
   value: T | null;
   options: readonly { value: T; label: string }[];
   onChange: (v: T) => void;
+  /** primary: 고른 쪽 블루 (성별처럼 꼭 골라야 하는 것) / secondary: 진한 회색 (기본값이 있는 덜 중요한 것) */
+  tone?: "primary" | "secondary";
 }) {
+  const onCls =
+    tone === "primary" ? "bg-blue font-bold text-white shadow-sm" : "bg-sub font-medium text-bg shadow-sm";
   return (
     <div
       role="radiogroup"
@@ -385,9 +391,7 @@ function Segmented<T extends string>({
             aria-checked={on}
             onClick={() => onChange(o.value)}
             className={`rounded-[9px] text-[16px] transition-colors ${
-              on
-                ? "bg-blue font-bold text-white shadow-sm"
-                : "font-medium text-sub active:bg-bg"
+              on ? onCls : "font-medium text-sub active:bg-bg"
             }`}
           >
             {o.label}
@@ -416,43 +420,11 @@ export function parseCards(text: string): Card[] {
   return cards;
 }
 
-const BASIS = /^근거\s*[:：]\s*/;
-
-/** 이 카드에 반영된 사주·MBTI 성향 태그 */
-function BasisTags({
-  tags,
-  tone,
-}: {
-  tags: string[];
-  tone: "plain" | "onBlue" | "todo";
-}) {
-  if (tags.length === 0) return null;
-  const chip =
-    tone === "onBlue"
-      ? "bg-white/20 text-white"
-      : tone === "todo"
-        ? "bg-bg text-blue border border-blue/30"
-        : "bg-bg text-blue border border-line";
-  return (
-    <div
-      className={`mt-3 flex flex-wrap items-center gap-1.5 ${tone === "onBlue" ? "" : ""}`}
-    >
-      <span
-        className={`text-[12px] font-bold ${tone === "onBlue" ? "text-white/75" : "text-sub"}`}
-      >
-        반영된 성향
-      </span>
-      {tags.map((t, i) => (
-        <span
-          key={i}
-          className={`rounded-full px-2.5 py-1 text-[12.5px] font-medium ${chip}`}
-        >
-          {t}
-        </span>
-      ))}
-    </div>
-  );
-}
+/**
+ * AI가 카드마다 쓰는 "근거: …" 줄 (사주·MBTI를 엮게 하려는 장치)은 화면에 보이지 않게 뺀다.
+ * 스트리밍 중 "근" 한 글자만 먼저 와도 잠깐 보이지 않게 함께 거른다.
+ */
+const isBasisLine = (l: string) => l === "근" || /^근거/.test(l);
 
 /** "할 일. 이유." → 첫 문장(할 일)과 나머지(이유)로 나눈다 */
 function splitAction(text: string): [string, string] {
@@ -466,16 +438,7 @@ export function ResultCards({ text }: { text: string }) {
       {parseCards(text).map((c, i) => {
         const answer = c.title === "나답의 답";
         const todo = c.title === "이번 주 해볼 것";
-        // "근거: A · B" 줄은 반영된 성향 태그로 따로 보여준다
-        const basisLine = c.lines.find((l) => BASIS.test(l));
-        const basis = basisLine
-          ? basisLine
-              .replace(BASIS, "")
-              .split(/\s*[·•,]\s*/)
-              .map((t) => t.trim())
-              .filter(Boolean)
-          : [];
-        const body = c.lines.filter((l) => !BASIS.test(l));
+        const body = c.lines.filter((l) => !isBasisLine(l));
         const items = body
           .filter((l) => /^[-•]\s+/.test(l))
           .map((l) => l.replace(/^[-•]\s+/, ""));
@@ -527,7 +490,6 @@ export function ResultCards({ text }: { text: string }) {
                   );
                 })}
               </ol>
-              <BasisTags tags={basis} tone="todo" />
             </section>
           );
         }
@@ -554,7 +516,6 @@ export function ResultCards({ text }: { text: string }) {
                 {p}
               </p>
             ))}
-            <BasisTags tags={basis} tone={answer ? "onBlue" : "plain"} />
             {items.length > 0 && (
               <ul className="mt-1 flex flex-col gap-2">
                 {items.map((it, j) => (

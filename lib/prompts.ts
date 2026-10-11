@@ -64,13 +64,31 @@ function userInfoBlock(p: Profile): string {
   return lines.join("\n");
 }
 
+/** 관계 고민에서 "그 사람"이 누구인지 (관계를 물은 경우엔 그 답, 아니면 마음 보기로 정함) */
+const PARTNER_BY_MIND = ["좋아하는 사람", "만나고 있는 사람", null, "헤어진 사람"] as const;
+export function partnerText(p: Profile): string | null {
+  if (p.q1.kind !== "option" || p.q1.index !== 1) return null;
+  const rel = relText(p);
+  if (rel) return rel;
+  if (p.q2?.kind === "option") return PARTNER_BY_MIND[p.q2.index] ?? null;
+  return null;
+}
+
 function coreConcern(p: Profile): string {
   let s = concernText(p);
   const mind = mindText(p);
   if (mind) s += ` → ${mind}`;
-  const rel = relText(p);
-  if (rel) s += ` (상대: ${rel})`;
+  const partner = partnerText(p);
+  if (partner) s += ` (상대: ${partner})`;
   return s;
+}
+
+/** 대화의 중심: 주인공과 다루는 대상을 고정한다 (곁가지로 새는 걸 막는 핵심) */
+function centerBlock(p: Profile): string {
+  const partner = partnerText(p);
+  return `[대화의 중심] 주인공은 이 사람이고, 다루는 건 오직 위 핵심 고민이야.${
+    partner ? ` 질문에 나오는 "그 사람"은 항상 핵심 고민 속 상대(${partner}) 한 명을 뜻해.` : ""
+  } 다른 인물(친구, 가족, 동료 등)은 핵심 고민을 비추는 배경일 뿐, 질문의 주인공이 될 수 없어.`;
 }
 
 function qaLines(list: QA[]): string {
@@ -88,6 +106,7 @@ export function buildQuestionPrompt(p: Profile, history: QA[]): string {
   return `너는 고민 상담 앱 '나답'의 상담가야. 한 사람의 고민 하나를 끝까지 파고드는 대화를 하고 있어. 다음 질문 하나와 보기 4개를 만들어.
 
 [이 사람의 핵심 고민] ${coreConcern(p)}
+${centerBlock(p)}
 
 [사용자 정보]
 ${userInfoBlock(p)}
@@ -99,11 +118,16 @@ ${before.length ? qaLines(before) : "(아직 없음)"}
 ${prev ? qaLines([prev]) : "(아직 없음)"}
 
 [진행] 맞춤 질문 ${n}번째 (최소 ${min}개, 최대 ${max}개). 이미 다룬 측면: ${covered.length ? covered.join(", ") : "없음"}
-참고할 측면: ${FOCUS.join(" / ")}
+참고할 측면 (모두 핵심 고민 안에서만): ${FOCUS.join(" / ")}
 
 가장 중요한 규칙:
 - 모든 질문은 반드시 핵심 고민과 직접 이어져야 해. 핵심 고민과 상관없는 일반적인 인생 질문은 금지.
+- 질문의 대상은 이 사람 자신(마음·생각·행동)이거나, 핵심 고민 속 상대·상황과의 일이어야 해.
 - 직전 답을 이어받아 그 답이 왜 그런지, 구체적으로 어떤 건지 한 단계 더 들어가. 직전 답에서 더 파고들 게 없을 때만 새 측면으로 넘어가고, 그때도 앞에서 나온 답과 연결해서 물어.
+- 직전 답에 다른 사람(친구, 가족, 동료 등)이나 핵심과 다른 주제가 나오면, 그 사람·주제를 파고들지 마. 그게 핵심 고민에 어떤 영향을 주는지, 그때 이 사람 마음이 어떤지로 되돌려 물어.
+  나쁜 예: (직전 답 "친구들은 헤어지라고 해") → "친구들이 왜 헤어지라고 생각하는 것 같아요?"
+  좋은 예: (직전 답 "친구들은 헤어지라고 해") → "그 말을 들으면 그 사람에 대한 마음은 어때요?"
+- 질문과 보기 모두, 대화에 아직 안 나온 새 인물이나 새 주제를 먼저 꺼내지 마.
 - 질문만 읽어도 이 사람의 고민과 이전 답을 기억하고 있다는 게 느껴지게 해. 예: 앞에서 '1년 넘게 미뤘다'고 했다면 '1년 동안 미루게 만든 건 뭐였어요?'처럼.
 
 형식 규칙:
@@ -115,7 +139,7 @@ ${prev ? qaLines([prev]) : "(아직 없음)"}
 - 판단하거나 훈계하는 말 금지.
 - focus: 이번 질문이 다루는 측면을 짧게.
 - last: ${min}번째 전에는 항상 false. ${min}번째부터는 매번 점검해서, 아래 중 대부분(4가지 이상)이 이미 대화에 나왔으면 true로 해.
-  점검: ① 고민이 언제·어떻게 시작됐는지 ② 요즘 드는 감정 ③ 겉으로 말한 고민 밑의 진짜 이유 ④ 돈·시간·사람 같은 현실 조건 ⑤ 바라는 모습이나 원하는 방향 ⑥ 당장 할 수 있는 작은 변화
+  점검: ① 고민이 언제·어떻게 시작됐는지 ② 요즘 드는 감정 ③ 겉으로 말한 고민 밑의 진짜 이유 ④ 이 고민에 걸린 현실 조건 ⑤ 바라는 모습이나 원하는 방향 ⑥ 당장 할 수 있는 작은 변화
   질문을 오래 끄는 것보다 충분히 알았을 때 마치는 게 이 사람에게 좋아. ${max}번째에 가까울수록 더 적극적으로 true를 골라. 마지막 질문(last가 true)은 정리하는 느낌으로, 바라는 모습이나 작은 변화를 묻는 질문이면 좋아.
 
 답하기 전에 question과 options의 글자 수를 직접 세어보고, 넘으면 줄여서 다시 써.
