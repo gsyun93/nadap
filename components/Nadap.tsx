@@ -486,7 +486,7 @@ function StartScreen({ onStart }: { onStart: () => void }) {
           성향과 사주까지 반영해 답을 찾아드려요
         </p>
       </div>
-      <PrimaryButton onClick={onStart}>시작하기</PrimaryButton>
+      <PrimaryButton onClick={onStart}>앱 설치 없이 바로 시작하기</PrimaryButton>
       <footer className="mt-5 flex justify-center gap-4 text-[12px] text-sub">
         <Link href="/terms" className="py-2">
           이용약관
