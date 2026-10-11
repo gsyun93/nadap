@@ -132,5 +132,6 @@ export function calcAge(
   const korean = today.year - solar.year + 1;
   const hadBirthday = today.month > solar.month || (today.month === solar.month && today.day >= solar.day);
   const full = today.year - solar.year - (hadBirthday ? 0 : 1);
-  return { korean, full, text: `${korean}세 (한국 나이, 만 ${full}세)` };
+  // AI에는 한국 나이만 넘긴다 (만 나이를 같이 주면 결과 글에 만 나이가 섞여 나옴)
+  return { korean, full, text: `${korean}세` };
 }

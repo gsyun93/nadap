@@ -51,20 +51,11 @@ export function shouldFinish(i: number, last: boolean, limits: { min: number; ma
 }
 
 /**
- * 진행률 % = 지나온 화면 수 / (예상 전체 화면 수 + 1), 최대 97
- * customShown: 지금까지 화면에 띄운 맞춤 질문 수 (질문을 기다리는 화면도 1개로 센다 → 질문이 도착해도 값이 안 바뀜)
- * customDone: 맞춤 질문이 끝났으면 true (마지막 "듣고 싶은 말" 화면)
+ * 진행률 % = 지나온 화면 수 / 예상 전체 화면 수
+ * 예상 전체는 처음부터 "맞춤 질문 최대 개수" 기준으로 고정해서, 매 단계 같은 폭으로 오르게 한다.
+ * (마지막 "듣고 싶은 말" 화면은 99% 이하, 결과 화면에서 100%)
  */
-export function progressPercent(
-  passed: number,
-  f: number,
-  customShown: number,
-  limits: { min: number; max: number },
-  customDone = false,
-) {
-  const expectedCustom = customDone
-    ? customShown
-    : Math.min(limits.max, Math.max(limits.min, customShown + 1));
-  const total = f + expectedCustom + 1;
-  return Math.min(97, Math.round((passed / (total + 1)) * 100));
+export function progressPercent(passed: number, f: number, limits: { min: number; max: number }) {
+  const total = f + limits.max + 1;
+  return Math.min(99, Math.round((passed / total) * 100));
 }

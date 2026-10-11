@@ -47,7 +47,7 @@ describe("나이 계산", () => {
     const age = calcAge({ year: 1993, month: 5, day: 17 }, { year: 2026, month: 10, day: 11 });
     expect(age.korean).toBe(34);
     expect(age.full).toBe(33);
-    expect(age.text).toBe("34세 (한국 나이, 만 33세)");
+    expect(age.text).toBe("34세");
   });
 
   it("생일 전이면 만 나이가 하나 적다", () => {
