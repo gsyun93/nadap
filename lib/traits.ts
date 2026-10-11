@@ -52,11 +52,23 @@ const ELEMENTS: Element[] = ["목", "화", "토", "금", "수"];
 /** 사주 성향 풀이 (사주 정보가 없으면 null) */
 export function sajuTraits(saju: SajuResult | null): string | null {
   if (!saju) return null;
+  const el = saju.elements;
   const lines = [`- 타고난 바탕: ${DAY_MASTER[saju.dayGan] ?? "정보 없음"}`];
   for (const e of ELEMENTS) {
-    if (saju.elements[e] >= 3) lines.push(`- ${STRONG[e]}`);
-    else if (saju.elements[e] === 0) lines.push(`- ${MISSING[e]}`);
+    if (el[e] >= 3) lines.push(`- ${STRONG[e]}`);
+    else if (el[e] === 0) lines.push(`- ${MISSING[e]}`);
   }
+  // 뚜렷하게 많거나 없는 기운이 없어도, 가장 많은 기운과 가장 적은 기운은 항상 넘겨서 엮을 재료를 만든다
+  const counts = ELEMENTS.map((e) => el[e]);
+  const maxN = Math.max(...counts);
+  const minN = Math.min(...counts);
+  if (maxN < 3 && maxN > minN) {
+    for (const e of ELEMENTS) if (el[e] === maxN) lines.push(`- (상대적으로) ${STRONG[e].replace("많음:", "비교적 많은 편:")}`);
+  }
+  if (minN > 0 && maxN > minN) {
+    for (const e of ELEMENTS) if (el[e] === minN) lines.push(`- (상대적으로) ${MISSING[e].replace("없음:", "적은 편:")}`);
+  }
+  if (maxN === minN) lines.push("- 다섯 기운이 고르게 있음: 한쪽으로 치우치지 않아 상황에 맞춰 균형을 잡는 편이다");
   return lines.join("\n");
 }
 
