@@ -50,9 +50,21 @@ export function shouldFinish(i: number, last: boolean, limits: { min: number; ma
   return false;
 }
 
-/** 진행률 % = 지나온 화면 수 / (예상 전체 화면 수 + 1), 최대 97 */
-export function progressPercent(passed: number, f: number, customMade: number, limits: { min: number; max: number }) {
-  const expectedCustom = Math.min(limits.max, Math.max(limits.min, customMade + 1));
+/**
+ * 진행률 % = 지나온 화면 수 / (예상 전체 화면 수 + 1), 최대 97
+ * customShown: 지금까지 화면에 띄운 맞춤 질문 수 (질문을 기다리는 화면도 1개로 센다 → 질문이 도착해도 값이 안 바뀜)
+ * customDone: 맞춤 질문이 끝났으면 true (마지막 "듣고 싶은 말" 화면)
+ */
+export function progressPercent(
+  passed: number,
+  f: number,
+  customShown: number,
+  limits: { min: number; max: number },
+  customDone = false,
+) {
+  const expectedCustom = customDone
+    ? customShown
+    : Math.min(limits.max, Math.max(limits.min, customShown + 1));
   const total = f + expectedCustom + 1;
   return Math.min(97, Math.round((passed / (total + 1)) * 100));
 }

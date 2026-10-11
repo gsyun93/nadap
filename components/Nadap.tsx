@@ -397,12 +397,23 @@ export default function Nadap() {
   };
 
   // ── 진행률 ──
-  const percent = useMemo(() => {
+  const rawPercent = useMemo(() => {
     if (screen.t === "result") return 100;
     const f = estimateFixed(s, screen);
     const passed = Math.max(0, stack.length - 2);
-    return progressPercent(passed, f, s.custom.length, limitsFromFixed(f));
+    // 맞춤 질문 수는 "화면 위치"로 센다: 질문을 기다리는 화면과 질문이 도착한 화면이 같은 값이 되게
+    const shown = screen.t === "custom" ? screen.i + 1 : screen.t === "tone" ? s.custom.filter((c) => c.ans).length : 0;
+    return progressPercent(passed, f, shown, limitsFromFixed(f), screen.t === "tone");
   }, [s, screen, stack.length]);
+
+  // 앞으로 나아가는 동안에는 진행률이 줄어들지 않게 (이전 버튼으로 돌아갈 때만 줄어든다)
+  const [progress, setProgress] = useState({ depth: 1, value: 0 });
+  if (progress.depth !== stack.length || (progress.value !== rawPercent && rawPercent > progress.value)) {
+    const forward = stack.length >= progress.depth;
+    const value = forward ? Math.max(progress.value, rawPercent) : rawPercent;
+    if (value !== progress.value || progress.depth !== stack.length) setProgress({ depth: stack.length, value });
+  }
+  const percent = progress.value;
 
   // ── 화면 ──
   if (screen.t === "start") return <StartScreen onStart={() => push({ t: "q1" })} />;

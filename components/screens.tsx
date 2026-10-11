@@ -1,9 +1,15 @@
 "use client";
 // 고정 화면 중 모양이 특별한 것들: MBTI 그리드, 생년월일 입력, 결과
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { HOURS, MBTI_GROUPS } from "@/lib/data";
-import { BIRTH_ERROR_TEXT, BirthError, calcSaju, type BirthInput, type Gender } from "@/lib/saju";
-import { PRESS_DELAY, PrimaryButton, Toggle } from "./ui";
+import {
+  BIRTH_ERROR_TEXT,
+  BirthError,
+  calcSaju,
+  type BirthInput,
+  type Gender,
+} from "@/lib/saju";
+import { PRESS_DELAY, PrimaryButton } from "./ui";
 
 // ── [3] MBTI 4×4 ──
 export function MbtiGrid({
@@ -33,9 +39,13 @@ export function MbtiGrid({
             key={g.label}
             className="rounded-[14px] px-1.5 pt-1.5 pb-1.5"
             // 그룹마다 옅은 블루 배경 (번갈아 톤을 달리해 네 묶음이 한눈에 구분되게)
-            style={{ background: `color-mix(in srgb, var(--c-blue) ${gi % 2 ? 9 : 5}%, var(--c-bg))` }}
+            style={{
+              background: `color-mix(in srgb, var(--c-blue) ${gi % 2 ? 9 : 5}%, var(--c-bg))`,
+            }}
           >
-            <p className="mb-1 pl-1 text-[11px] leading-[14px] font-bold text-blue">{g.label}</p>
+            <p className="mb-1 pl-1 text-[11px] leading-[14px] font-bold text-blue">
+              {g.label}
+            </p>
             <div className="grid grid-cols-4 gap-1.5">
               {g.types.map((t) => (
                 <button
@@ -44,10 +54,14 @@ export function MbtiGrid({
                   onClick={() => pick(t.code)}
                   aria-pressed={on(t.code)}
                   className={`flex min-h-[58px] flex-col items-center justify-center rounded-[10px] border px-0.5 py-1 text-center transition-colors duration-100 ${
-                    on(t.code) ? "border-blue bg-blue" : "border-line bg-bg active:bg-surface"
+                    on(t.code)
+                      ? "border-blue bg-blue"
+                      : "border-line bg-bg active:bg-surface"
                   }`}
                 >
-                  <span className={`text-[17px] leading-tight font-bold ${on(t.code) ? "text-white" : "text-deep"}`}>
+                  <span
+                    className={`text-[17px] leading-tight font-bold ${on(t.code) ? "text-white" : "text-deep"}`}
+                  >
                     {t.code}
                   </span>
                   <span
@@ -78,8 +92,7 @@ export type BirthForm = {
   calendar: "solar" | "lunar";
   dateDigits: string; // 생년월일 숫자 8자리 (입력 중이면 8자리 미만)
   leap: boolean;
-  hourIndex: number | null;
-  unknownHour: boolean;
+  hourIndex: number | null; // null = 모름 (안 골라도 사주는 날짜로 계산)
 };
 
 export const EMPTY_BIRTH_FORM: BirthForm = {
@@ -88,7 +101,6 @@ export const EMPTY_BIRTH_FORM: BirthForm = {
   dateDigits: "",
   leap: false,
   hourIndex: null,
-  unknownHour: false,
 };
 
 const MIN_YEAR = 1940;
@@ -105,19 +117,32 @@ function formatDate(d: string): string {
 
 function parseDigits(d: string) {
   if (d.length !== 8) return null;
-  return { year: Number(d.slice(0, 4)), month: Number(d.slice(4, 6)), day: Number(d.slice(6, 8)) };
+  return {
+    year: Number(d.slice(0, 4)),
+    month: Number(d.slice(4, 6)),
+    day: Number(d.slice(6, 8)),
+  };
 }
 
 /** 8자리를 다 입력했을 때의 날짜 오류 문구 (문제 없거나 입력 중이면 null) */
 function dateError(form: BirthForm): string | null {
   const p = parseDigits(form.dateDigits);
   if (!p) return null;
-  if (p.year < MIN_YEAR || p.year > MAX_YEAR) return `${MIN_YEAR}년부터 ${MAX_YEAR}년 사이로 입력해주세요.`;
+  if (p.year < MIN_YEAR || p.year > MAX_YEAR)
+    return `${MIN_YEAR}년부터 ${MAX_YEAR}년 사이로 입력해주세요.`;
   try {
-    calcSaju({ gender: "남자", calendar: form.calendar, ...p, leap: form.calendar === "lunar" && form.leap, hourIndex: null });
+    calcSaju({
+      gender: "남자",
+      calendar: form.calendar,
+      ...p,
+      leap: form.calendar === "lunar" && form.leap,
+      hourIndex: null,
+    });
     return null;
   } catch (e) {
-    return e instanceof BirthError ? BIRTH_ERROR_TEXT[e.kind] : BIRTH_ERROR_TEXT.solar;
+    return e instanceof BirthError
+      ? BIRTH_ERROR_TEXT[e.kind]
+      : BIRTH_ERROR_TEXT.solar;
   }
 }
 
@@ -149,16 +174,13 @@ export function BirthFormScreen({
       setError(dErr);
       return;
     }
-    if (form.hourIndex === null && !form.unknownHour) {
-      setError("태어난 시간을 고르거나 ‘몰라요’에 체크해주세요.");
-      return;
-    }
+    // 태어난 시간은 선택 사항: 안 고르면 시주만 빼고 날짜로 사주를 본다
     onSubmit({
       gender: form.gender,
       calendar: form.calendar,
       ...date,
       leap: form.calendar === "lunar" && form.leap,
-      hourIndex: form.unknownHour ? null : form.hourIndex,
+      hourIndex: form.hourIndex,
     });
   };
 
@@ -167,48 +189,71 @@ export function BirthFormScreen({
   const onDateInput = (raw: string) => {
     let d = raw.replace(/\D/g, "").slice(0, 8);
     // 점(.)만 지워진 경우엔 숫자 하나를 지운 것으로 처리
-    if (d === form.dateDigits && raw.length < formatDate(form.dateDigits).length) d = d.slice(0, -1);
+    if (
+      d === form.dateDigits &&
+      raw.length < formatDate(form.dateDigits).length
+    )
+      d = d.slice(0, -1);
     set({ dateDigits: d });
     // 8자리를 올바르게 다 치면 키패드를 닫아 아래 칸이 보이게
-    if (d.length === 8 && !dateError({ ...form, dateDigits: d })) dateRef.current?.blur();
+    if (d.length === 8 && !dateError({ ...form, dateDigits: d }))
+      dateRef.current?.blur();
   };
 
   const num = (v: string) => (v === "" ? null : Number(v));
 
-  const legendCls = "mb-1.5 text-[13px] font-medium text-sub";
-
   return (
     <div>
-      <div className="flex flex-col gap-4">
-        {/* 성별 + 양력·음력 한 줄 */}
-        <div className="grid grid-cols-2 gap-3">
-          <fieldset>
-            <legend className={legendCls}>성별</legend>
-            <Toggle
-              label="성별"
-              value={form.gender}
-              onChange={(gender) => set({ gender })}
-              options={[
-                { value: "남자", label: "남자" },
-                { value: "여자", label: "여자" },
-              ]}
-            />
-          </fieldset>
-          <fieldset>
-            <legend className={legendCls}>생년월일</legend>
-            <Toggle
-              label="양력 음력"
-              value={form.calendar}
-              onChange={(calendar) => set({ calendar, leap: calendar === "lunar" ? form.leap : false })}
-              options={[
-                { value: "solar", label: "양력" },
-                { value: "lunar", label: "음력" },
-              ]}
-            />
-          </fieldset>
-        </div>
+      {/* 왼쪽에 항목 이름, 오른쪽에 입력: 한 줄에 한 가지씩 */}
+      <div className="flex flex-col gap-3">
+        <Row label="성별">
+          <Segmented
+            label="성별"
+            value={form.gender}
+            onChange={(gender) => set({ gender })}
+            options={[
+              { value: "남자", label: "남자" },
+              { value: "여자", label: "여자" },
+            ]}
+          />
+        </Row>
 
-        <div>
+        <Row label="달력">
+          <div className="flex gap-2">
+            <div className="min-w-0 flex-1">
+              <Segmented
+                label="양력 음력"
+                value={form.calendar}
+                onChange={(calendar) =>
+                  set({
+                    calendar,
+                    leap: calendar === "lunar" ? form.leap : false,
+                  })
+                }
+                options={[
+                  { value: "solar", label: "양력" },
+                  { value: "lunar", label: "음력" },
+                ]}
+              />
+            </div>
+            {form.calendar === "lunar" && (
+              <button
+                type="button"
+                aria-pressed={form.leap}
+                onClick={() => set({ leap: !form.leap })}
+                className={`h-12 shrink-0 rounded-[12px] border-[1.5px] px-3.5 text-[15px] font-medium transition-colors ${
+                  form.leap
+                    ? "border-blue bg-blue text-white"
+                    : "border-line text-sub active:bg-surface"
+                }`}
+              >
+                윤달
+              </button>
+            )}
+          </div>
+        </Row>
+
+        <Row label="생일">
           <input
             ref={dateRef}
             type="text"
@@ -216,53 +261,57 @@ export function BirthFormScreen({
             autoComplete="bday"
             aria-label="생년월일 8자리"
             aria-invalid={!!liveDateError}
-            placeholder="생년월일 8자리 (예: 19930517)"
+            placeholder="8자리 (예: 19930517)"
             value={formatDate(form.dateDigits)}
             onChange={(e) => onDateInput(e.target.value)}
             className={`h-12 w-full rounded-[12px] border-[1.5px] bg-bg px-4 text-[17px] tracking-wide text-text tabular-nums placeholder:text-[15px] placeholder:tracking-normal placeholder:text-sub/70 focus:outline-none focus-visible:outline-2 focus-visible:outline-blue ${
-              liveDateError ? "border-[#E5484D]" : "border-line focus:border-blue"
+              liveDateError
+                ? "border-[#E5484D]"
+                : "border-line focus:border-blue"
             }`}
           />
-          {liveDateError && <p className="mt-1.5 text-[13px] font-medium text-[#E5484D]">{liveDateError}</p>}
-          {form.calendar === "lunar" && (
-            <label className="mt-1 flex min-h-12 items-center gap-2.5 text-[16px]">
-              <input type="checkbox" className="size-5 accent-[var(--c-blue)]" checked={form.leap} onChange={(e) => set({ leap: e.target.checked })} />
-              윤달이에요
-            </label>
-          )}
-        </div>
+        </Row>
+        {liveDateError && (
+          <p className="-mt-1 pl-[60px] text-[13px] font-medium text-[#E5484D]">
+            {liveDateError}
+          </p>
+        )}
 
-        {/* 태어난 시간 + 몰라요 버튼 */}
-        <fieldset>
-          <legend className={legendCls}>태어난 시간</legend>
-          <div className="flex gap-2">
+        <Row label="시간">
+          <div className="relative">
             <select
               aria-label="태어난 시간"
-              className={`${selectCls} min-w-0 flex-1`}
-              disabled={form.unknownHour}
+              className={`${selectCls} pr-10`}
               value={form.hourIndex ?? ""}
               onChange={(e) => set({ hourIndex: num(e.target.value) })}
             >
-              <option value="">시간 선택</option>
+              <option value="">모름</option>
               {HOURS.map((h, i) => (
                 <option key={h.name} value={i}>
                   {h.name} ({h.range})
                 </option>
               ))}
             </select>
-            <button
-              type="button"
-              aria-pressed={form.unknownHour}
-              aria-label="태어난 시간을 몰라요"
-              onClick={() => set({ unknownHour: !form.unknownHour })}
-              className={`h-12 shrink-0 rounded-[12px] border-[1.5px] px-4 text-[16px] font-medium transition-colors ${
-                form.unknownHour ? "border-blue bg-blue text-white" : "border-line text-text active:bg-surface"
-              }`}
+            {/* 고를 수 있는 칸이라는 표시 */}
+            <svg
+              aria-hidden
+              viewBox="0 0 20 20"
+              className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-sub"
             >
-              몰라요
-            </button>
+              <path
+                d="M5 7.5 10 12.5 15 7.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </div>
-        </fieldset>
+        </Row>
+        <p className="-mt-1 pl-[60px] text-[13px] text-sub">
+          시간을 몰라도 날짜만으로 사주를 볼 수 있어요
+        </p>
       </div>
 
       {/* 하단 고정 영역 높이만큼 비워두기 */}
@@ -272,7 +321,10 @@ export function BirthFormScreen({
       <div className="fixed inset-x-0 bottom-0 z-10 bg-gradient-to-t from-bg from-85% to-transparent pt-5">
         <div className="mx-auto max-w-[440px] px-4 pb-[max(env(safe-area-inset-bottom),8px)]">
           {error && (
-            <p role="alert" className="mb-2 text-[14px] font-medium text-[#E5484D]">
+            <p
+              role="alert"
+              className="mb-2 text-[14px] font-medium text-[#E5484D]"
+            >
               {error}
             </p>
           )}
@@ -284,9 +336,64 @@ export function BirthFormScreen({
           >
             건너뛰기 · 성향만으로 볼게요
           </button>
-          <p className="text-center text-[12px] text-sub">입력한 정보는 이번 분석에만 쓰여요</p>
+          <p className="text-center text-[12px] text-sub">
+            입력한 정보는 이번 분석에만 쓰여요
+          </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** 왼쪽 항목 이름 + 오른쪽 입력 한 줄 */
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-12 shrink-0 text-[15px] font-bold text-text">
+        {label}
+      </span>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
+/** 둘 중 하나 고르기: 회색 바탕 안에서 고른 쪽만 블루로 채워지는 스위치 */
+function Segmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T | null;
+  options: readonly { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className="grid h-12 grid-cols-2 gap-1 rounded-[12px] bg-surface p-1"
+    >
+      {options.map((o) => {
+        const on = value === o.value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(o.value)}
+            className={`rounded-[9px] text-[16px] transition-colors ${
+              on
+                ? "bg-blue font-bold text-white shadow-sm"
+                : "font-medium text-sub active:bg-bg"
+            }`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -309,6 +416,44 @@ export function parseCards(text: string): Card[] {
   return cards;
 }
 
+const BASIS = /^근거\s*[:：]\s*/;
+
+/** 이 카드에 반영된 사주·MBTI 성향 태그 */
+function BasisTags({
+  tags,
+  tone,
+}: {
+  tags: string[];
+  tone: "plain" | "onBlue" | "todo";
+}) {
+  if (tags.length === 0) return null;
+  const chip =
+    tone === "onBlue"
+      ? "bg-white/20 text-white"
+      : tone === "todo"
+        ? "bg-bg text-blue border border-blue/30"
+        : "bg-bg text-blue border border-line";
+  return (
+    <div
+      className={`mt-3 flex flex-wrap items-center gap-1.5 ${tone === "onBlue" ? "" : ""}`}
+    >
+      <span
+        className={`text-[12px] font-bold ${tone === "onBlue" ? "text-white/75" : "text-sub"}`}
+      >
+        반영된 성향
+      </span>
+      {tags.map((t, i) => (
+        <span
+          key={i}
+          className={`rounded-full px-2.5 py-1 text-[12.5px] font-medium ${chip}`}
+        >
+          {t}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /** "할 일. 이유." → 첫 문장(할 일)과 나머지(이유)로 나눈다 */
 function splitAction(text: string): [string, string] {
   const m = text.match(/^(.+?[.!?。])\s+(.+)$/);
@@ -321,8 +466,20 @@ export function ResultCards({ text }: { text: string }) {
       {parseCards(text).map((c, i) => {
         const answer = c.title === "나답의 답";
         const todo = c.title === "이번 주 해볼 것";
-        const items = c.lines.filter((l) => /^[-•]\s+/.test(l)).map((l) => l.replace(/^[-•]\s+/, ""));
-        const paras = c.lines.filter((l) => !/^[-•]\s+/.test(l));
+        // "근거: A · B" 줄은 반영된 성향 태그로 따로 보여준다
+        const basisLine = c.lines.find((l) => BASIS.test(l));
+        const basis = basisLine
+          ? basisLine
+              .replace(BASIS, "")
+              .split(/\s*[·•,]\s*/)
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : [];
+        const body = c.lines.filter((l) => !BASIS.test(l));
+        const items = body
+          .filter((l) => /^[-•]\s+/.test(l))
+          .map((l) => l.replace(/^[-•]\s+/, ""));
+        const paras = body.filter((l) => !/^[-•]\s+/.test(l));
 
         // 이번 주 해볼 것: 결과에서 가장 눈에 띄게 (두꺼운 블루 테두리, 번호, 할 일은 크고 굵게)
         if (todo) {
@@ -330,9 +487,13 @@ export function ResultCards({ text }: { text: string }) {
             <section
               key={i}
               className="mt-2 rounded-[18px] border-2 border-blue px-5 py-5 shadow-[0_8px_24px_-12px_var(--c-blue)]"
-              style={{ background: "color-mix(in srgb, var(--c-blue) 7%, var(--c-bg))" }}
+              style={{
+                background: "color-mix(in srgb, var(--c-blue) 7%, var(--c-bg))",
+              }}
             >
-              <h2 className="mb-3 text-[17px] font-bold text-blue">{c.title}</h2>
+              <h2 className="mb-3 text-[17px] font-bold text-blue">
+                {c.title}
+              </h2>
               {paras.map((p, j) => (
                 <p key={j} className="mb-2 text-[16px] leading-[1.7]">
                   {p}
@@ -342,7 +503,10 @@ export function ResultCards({ text }: { text: string }) {
                 {items.map((it, j) => {
                   const [action, reason] = splitAction(it);
                   return (
-                    <li key={j} className="flex gap-3 rounded-[14px] bg-bg px-4 py-3.5">
+                    <li
+                      key={j}
+                      className="flex gap-3 rounded-[14px] bg-bg px-4 py-3.5"
+                    >
                       <span
                         aria-hidden
                         className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-blue text-[14px] font-bold text-white"
@@ -350,30 +514,55 @@ export function ResultCards({ text }: { text: string }) {
                         {j + 1}
                       </span>
                       <div className="min-w-0">
-                        <p className="text-[17px] leading-[1.5] font-bold">{action}</p>
-                        {reason && <p className="mt-1 text-[15px] leading-[1.65] text-sub">{reason}</p>}
+                        <p className="text-[17px] leading-[1.5] font-bold">
+                          {action}
+                        </p>
+                        {reason && (
+                          <p className="mt-1 text-[15px] leading-[1.65] text-sub">
+                            {reason}
+                          </p>
+                        )}
                       </div>
                     </li>
                   );
                 })}
               </ol>
+              <BasisTags tags={basis} tone="todo" />
             </section>
           );
         }
 
         return (
-          <section key={i} className={`rounded-[16px] px-5 py-5 ${answer ? "bg-blue text-white" : "bg-surface"}`}>
-            <h2 className={`mb-2 text-[14px] font-bold ${answer ? "text-white/80" : "text-blue"}`}>{c.title}</h2>
+          <section
+            key={i}
+            className={`rounded-[16px] px-5 py-5 ${answer ? "bg-blue text-white" : "bg-surface"}`}
+          >
+            <h2
+              className={`mb-2 text-[14px] font-bold ${answer ? "text-white/80" : "text-blue"}`}
+            >
+              {c.title}
+            </h2>
             {paras.map((p, j) => (
-              <p key={j} className={answer ? "text-[19px] leading-[1.5] font-bold" : "text-[16px] leading-[1.7]"}>
+              <p
+                key={j}
+                className={
+                  answer
+                    ? "text-[19px] leading-[1.5] font-bold"
+                    : "text-[16px] leading-[1.7]"
+                }
+              >
                 {p}
               </p>
             ))}
+            <BasisTags tags={basis} tone={answer ? "onBlue" : "plain"} />
             {items.length > 0 && (
               <ul className="mt-1 flex flex-col gap-2">
                 {items.map((it, j) => (
                   <li key={j} className="flex gap-2 text-[16px] leading-[1.6]">
-                    <span aria-hidden className={answer ? "text-white" : "text-blue"}>
+                    <span
+                      aria-hidden
+                      className={answer ? "text-white" : "text-blue"}
+                    >
                       •
                     </span>
                     <span>{it}</span>

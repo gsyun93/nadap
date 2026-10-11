@@ -47,32 +47,32 @@ function Typewriter({ text, instant }: { text: string; instant: boolean }) {
 export type RecapItem = { question: string; answer: string };
 
 function Note({ answers, compact, reduce }: { answers: RecapItem[]; compact: boolean; reduce: boolean }) {
-  const shown = answers.slice(compact ? -3 : -5);
-  const older = shown.slice(0, -1);
-  const latest = shown[shown.length - 1];
+  // 질문과 답을 한 쌍으로. 공간을 위해 최근 것만 (성향 조각이 함께 나올 땐 2쌍, 아니면 3쌍)
+  const shown = answers.slice(compact ? -2 : -3);
   return (
-    <div className="rounded-[16px] border border-line bg-surface px-5 py-4">
-      <p className="mb-2.5 text-[13px] font-bold text-blue">상담가 노트</p>
-      <ul className="flex flex-col gap-2 text-[16px] leading-[1.5]">
-        {older.map((a, i) => (
-          <li key={i} className="flex gap-2 text-sub" style={{ opacity: 0.55 + (0.45 * (i + 1)) / (older.length + 1) }}>
-            <span aria-hidden>·</span>
-            <span>{a.answer}</span>
-          </li>
-        ))}
-        {latest && (
-          <li className="flex gap-2 font-medium text-text">
-            <span aria-hidden className="text-blue">
-              ·
-            </span>
-            <span>
-              {/* 방금 답은 어떤 질문에 대한 답인지 작게 함께 */}
-              <span className="block text-[12px] font-normal text-sub">{latest.question}</span>
-              <Typewriter text={latest.answer} instant={reduce} />
-            </span>
-          </li>
-        )}
-      </ul>
+    <div className="rounded-[16px] border border-line bg-surface px-4 py-4">
+      <p className="mb-3 px-1 text-[13px] font-bold text-blue">상담가 노트</p>
+      <ol className="flex flex-col gap-2.5">
+        {shown.map((item, i) => {
+          const latest = i === shown.length - 1;
+          return (
+            <li
+              key={i}
+              className={`rounded-[12px] px-3.5 py-3 ${latest ? "border-[1.5px] border-blue bg-bg" : "bg-bg/60"}`}
+            >
+              <p className={`text-[13px] leading-[1.45] ${latest ? "text-blue" : "text-sub"}`}>
+                <span aria-hidden className="mr-1 font-bold">
+                  Q
+                </span>
+                {item.question}
+              </p>
+              <p className={`mt-1 text-[16px] leading-[1.45] ${latest ? "font-bold text-text" : "text-text/80"}`}>
+                {latest ? <Typewriter text={item.answer} instant={reduce} /> : item.answer}
+              </p>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }

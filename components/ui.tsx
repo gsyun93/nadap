@@ -200,34 +200,3 @@ export function PrimaryButton({
     </button>
   );
 }
-
-export function Toggle<T extends string>({
-  options,
-  value,
-  onChange,
-  label,
-}: {
-  options: readonly { value: T; label: string }[];
-  value: T | null;
-  onChange: (v: T) => void;
-  label: string;
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-2.5" role="radiogroup" aria-label={label}>
-      {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          role="radio"
-          aria-checked={value === o.value}
-          onClick={() => onChange(o.value)}
-          className={`h-12 rounded-[12px] border-[1.5px] text-[16px] font-medium transition-colors ${
-            value === o.value ? "border-blue bg-blue text-white" : "border-line text-text active:bg-surface"
-          }`}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
