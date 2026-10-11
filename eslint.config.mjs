@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 로컬 테스트용 임시 파일 (git에 안 올라감)
+    ".scratch/**",
   ]),
 ]);
 
