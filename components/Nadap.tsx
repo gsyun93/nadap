@@ -10,7 +10,8 @@ import {
   MINI,
   Q1,
   Q2,
-  REL,
+  REL_LABELS,
+  AGE_LABELS,
   TONES,
   type FixedQuestion,
 } from "@/lib/data";
@@ -433,7 +434,7 @@ export default function Nadap() {
         <>
           <QuestionTitle eyebrow="자꾸 서운하고 부딪혀" title="그 사람은 나한테 어떤 사람이에요?" />
           <ChoiceList
-            options={REL}
+            options={REL_LABELS}
             selected={s.rel === null ? null : { kind: "option", index: s.rel }}
             onSelect={answerRel}
           />
@@ -485,7 +486,7 @@ export default function Nadap() {
         <>
           <QuestionTitle eyebrow="나이대" title="나이대만 알려줄래요?" sub="나잇대에 맞춰 질문을 골라줄게요" />
           <ChoiceList
-            options={AGES}
+            options={AGE_LABELS}
             selected={s.ageBand === null ? null : { kind: "option", index: s.ageBand }}
             onSelect={answerAge}
           />

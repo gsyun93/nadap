@@ -78,6 +78,7 @@ lib/prompts.ts               프롬프트 템플릿
 lib/flow.ts                  질문 개수·진행률 계산
 lib/tree.ts, lib/tree/*.json 맞춤 질문 1~4번째 질문 트리 (고민 12갈래, 고른 갈래만 불러옴)
 scripts/build-tree.mjs       트리 원본 JSON → lib/tree/ 갈래별 파일 (node scripts/build-tree.mjs <원본 경로>)
+scripts/rewrite-tree-options.mjs  트리 보기를 대화체로 다듬는 1회성 변환 (결과: scripts/tree-option-rewrites.json, build-tree가 적용)
 lib/ai.ts                    AI 호출 래퍼 (질문용·결과용 분리)
 lib/server-utils.ts          입력 검증, IP 기준 호출 제한 (질문 분당 60회 / 결과 분당 3회)
 components/Logo.tsx          로고 SVG (글자 로고, 앱 아이콘)
