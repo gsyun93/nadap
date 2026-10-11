@@ -18,7 +18,7 @@ import {
 import { fixedCount, limitsFromFixed, needsRel, progressPercent, shouldFinish } from "@/lib/flow";
 import { answerText, buildQuestionPrompt, concernText, mindText } from "@/lib/prompts";
 import { calcAge, calcSaju, type BirthInput } from "@/lib/saju";
-import { traitTips, weakElement } from "@/lib/traits";
+import { weakElement } from "@/lib/traits";
 import { branchKey, loadBranch, TREE_DEPTH, treeFocus } from "@/lib/tree";
 import type { Answer, GeneratedQuestion, Profile, QA } from "@/lib/types";
 import { Logo } from "./Logo";
@@ -122,8 +122,8 @@ export default function Nadap() {
   // 질문 캐시 (키 = 프롬프트 전체 문자열)
   const cache = useRef(new Map<string, Promise<GeneratedQuestion>>());
   // 회고 로딩 화면: 몇 번째 기다림인지, 다음에 보여줄 성향 조각, 마지막 숨 고르기, 보이기 시작한 시각
-  const recap = useRef({ waits: 0, tipCursor: 0, lastBreath: -10 });
-  const [recapPlan, setRecapPlan] = useState<{ i: number; mode: RecapMode; tip: string | null } | null>(null);
+  const recap = useRef({ waits: 0, lastBreath: -10 });
+  const [recapPlan, setRecapPlan] = useState<{ i: number; mode: RecapMode } | null>(null);
   const recapShownAt = useRef<number | null>(null);
   // 노트를 누르거나 스크롤하는 중인지 (보는 중이면 다음 질문으로 넘기지 않는다)
   const recapActivity = useRef<RecapActivity>({ down: false, until: 0 });
@@ -172,18 +172,6 @@ export default function Nadap() {
 
   const profile = useMemo(() => toProfile(s), [s]);
   const limits = useMemo(() => (profile ? limitsFromFixed(fixedCount(profile)) : { min: 8, max: 12 }), [profile]);
-
-  // 회고 화면의 "성향 한 조각" 문장들 (사주·MBTI에서 코드로 뽑음)
-  const tips = useMemo(() => {
-    if (!profile) return [];
-    let saju = null;
-    try {
-      saju = profile.birth ? calcSaju(profile.birth) : null;
-    } catch {
-      saju = null;
-    }
-    return traitTips(saju, profile.mbti);
-  }, [profile]);
 
   /** 맞춤 질문 i번째 다음 질문을 AI로 만든다 (실패하면 예비 질문) */
   const fillNextFromAI = useCallback(
@@ -255,7 +243,7 @@ export default function Nadap() {
 
   /**
    * AI로 다음 질문을 기다릴 때 보여줄 회고 화면 정하기 (실제로 AI를 기다릴 때만 센다)
-   * 대부분 노트, 3번에 한 번 성향 한 조각, 무거운 답 뒤엔 숨 고르기 (숨 고르기는 3번에 한 번까지)
+   * 기본은 상담가 노트, 무거운 답 뒤엔 숨 고르기 (숨 고르기는 3번에 한 번까지)
    */
   const planRecap = useCallback(
     (state: State, i: number) => {
@@ -267,14 +255,13 @@ export default function Nadap() {
       if (isHeavyAnswer(latest) && r.waits - r.lastBreath >= 3) {
         mode = "breath";
         r.lastBreath = r.waits;
-      } else if (r.waits % 3 === 2 && tips.length > 0) mode = "tip";
-      const tip = mode === "tip" ? tips[r.tipCursor++ % tips.length] : null;
+      }
       recapShownAt.current = null;
       recapActivity.current = { down: false, until: 0 };
       setRecapLeaving(false);
-      setRecapPlan({ i: i + 1, mode, tip });
+      setRecapPlan({ i: i + 1, mode });
     },
-    [tips],
+    [],
   );
 
   /** 맞춤 질문 i번째 다음 질문을 준비해서 i+1 화면으로 */
@@ -420,7 +407,7 @@ export default function Nadap() {
   const restart = () => {
     navToken.current++;
     cache.current.clear();
-    recap.current = { waits: 0, tipCursor: 0, lastBreath: -10 };
+    recap.current = { waits: 0, lastBreath: -10 };
     setRecapPlan(null);
     setS(INITIAL);
     setStack([{ t: "start" }]);
@@ -550,7 +537,6 @@ export default function Nadap() {
       ) : (
         <RecapLoading
           mode={recapPlan?.i === screen.i ? recapPlan.mode : "note"}
-          tip={recapPlan?.i === screen.i ? recapPlan.tip : null}
           answers={historyOf(s.custom, screen.i - 1).filter((h) => h.answer)}
           onVisible={() => {
             recapShownAt.current = Date.now();

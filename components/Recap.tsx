@@ -1,11 +1,10 @@
 "use client";
 // 다음 질문을 만드는 동안 보여주는 회고 화면 (AI 호출 없음, 비용 0원)
 //  - note:   상담가 노트에 지금까지의 답이 적히고, 방금 고른 답이 한 글자씩 써진다
-//  - tip:    노트 + 사주·MBTI "성향 한 조각"
 //  - breath: 무거운 답 다음에 숨 고르기
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
-export type RecapMode = "note" | "tip" | "breath";
+export type RecapMode = "note" | "breath";
 
 /** 이 시간 안에 질문이 오면 회고 화면을 아예 보여주지 않는다 */
 export const RECAP_DELAY = 300;
@@ -68,12 +67,10 @@ export type RecapItem = { question: string; answer: string };
 
 function Note({
   answers,
-  compact,
   reduce,
   onActivity,
 }: {
   answers: RecapItem[];
-  compact: boolean;
   reduce: boolean;
   onActivity: (e: RecapActivityEvent) => void;
 }) {
@@ -110,9 +107,7 @@ function Note({
         onScroll={() => {
           if (!autoScroll.current) onActivity("scroll");
         }}
-        className={`flex flex-col gap-2.5 overflow-y-auto overscroll-contain rounded-[12px] ${
-          compact ? "max-h-[28dvh]" : "max-h-[46dvh]"
-        }`}
+        className="flex max-h-[46dvh] flex-col gap-2.5 overflow-y-auto overscroll-contain rounded-[12px]"
         style={{
           // 위쪽이 잘린 게 보이도록 살짝 흐리게
           maskImage: scrollable ? "linear-gradient(to bottom, transparent 0, black 28px)" : undefined,
@@ -163,14 +158,12 @@ function Breath({ reduce }: { reduce: boolean }) {
 export function RecapLoading({
   mode,
   answers,
-  tip,
   onVisible,
   leaving,
   onActivity,
 }: {
   mode: RecapMode;
   answers: RecapItem[]; // 지금까지의 질문과 답 (오래된 것 → 방금 고른 것)
-  tip: string | null;
   onVisible: () => void;
   leaving: boolean; // 다음 질문이 준비돼 사라지는 중
   onActivity: (e: RecapActivityEvent) => void;
@@ -206,14 +199,7 @@ export function RecapLoading({
       ) : (
         <>
           <p className="mb-2 text-[14px] font-medium text-blue">지금까지 들은 이야기</p>
-          <Note answers={answers} compact={mode === "tip"} reduce={reduce} onActivity={onActivity} />
-          {mode === "tip" && tip && (
-            <div className="mt-3 rounded-[16px] border-[1.5px] border-blue/40 px-5 py-4">
-              <p className="mb-1.5 text-[13px] font-bold text-blue">당신의 성향 한 조각</p>
-              <p className="text-[16px] leading-[1.6] font-medium">{tip}</p>
-              <p className="mt-2 text-[13px] text-sub">이 성향이 지금 고민과 어떻게 닿아 있는지 결과에서 풀어드릴게요.</p>
-            </div>
-          )}
+          <Note answers={answers} reduce={reduce} onActivity={onActivity} />
         </>
       )}
       <p className="mt-6 flex items-center justify-center gap-2 text-[14px] text-sub">

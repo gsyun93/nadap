@@ -79,58 +79,6 @@ export function mbtiTraits(mbti: { code: string; estimated: boolean } | null): s
   return [head, ...mbti.code.split("").map((l) => `- ${MBTI_LETTER[l] ?? ""}`)].join("\n");
 }
 
-// ── 로딩 화면 "성향 한 조각"용 해요체 문장 (AI 호출 없이 코드로) ──
-const DAY_MASTER_TIP: Record<string, string> = {
-  甲: "곧게 위로 자라는 큰 나무 같은 사람이에요. 한번 정하면 꾸준히 밀고 나가요.",
-  乙: "어디서든 뿌리내리는 풀 같은 사람이에요. 유연하고 사람 사이를 잘 이어요.",
-  丙: "한낮의 해 같은 사람이에요. 솔직하게 드러낼 때 힘이 나요.",
-  丁: "어둠을 밝히는 촛불 같은 사람이에요. 가까운 사람을 오래 따뜻하게 챙겨요.",
-  戊: "묵직한 큰 산 같은 사람이에요. 믿음직하게 버티지만 쉽게 움직이지는 않아요.",
-  己: "곡식을 키우는 논밭 같은 사람이에요. 남을 세심하게 돌보는 편이에요.",
-  庚: "단단한 바위 같은 사람이에요. 맺고 끊는 게 분명한 편이에요.",
-  辛: "다듬어진 보석 같은 사람이에요. 기준이 높고 스스로에게 엄격한 편이에요.",
-  壬: "넓게 흐르는 강 같은 사람이에요. 생각이 크고 매이는 걸 답답해해요.",
-  癸: "조용히 스미는 비 같은 사람이에요. 감수성이 깊고 속으로 생각이 많아요.",
-};
-const STRONG_TIP: Record<Element, string> = {
-  목: "나무 기운이 많아요. 일을 벌이는 힘이 큰 대신, 벌여놓고 지치기 쉬워요.",
-  화: "불 기운이 많아요. 열정이 큰 대신, 금방 달아오르고 금방 지칠 수 있어요.",
-  토: "흙 기운이 많아요. 버티는 힘이 큰 대신, 혼자 짊어지기 쉬워요.",
-  금: "쇠 기운이 많아요. 기준이 분명한 대신, 자신에게 엄격해지기 쉬워요.",
-  수: "물 기운이 많아요. 생각이 깊은 대신, 걱정이 꼬리를 물기 쉬워요.",
-};
-const MISSING_TIP: Record<Element, string> = {
-  목: "나무 기운이 없어요. 새로 시작하는 첫발이 조금 무거울 수 있어요.",
-  화: "불 기운이 없어요. 속마음을 드러내는 게 조금 어려울 수 있어요.",
-  토: "흙 기운이 없어요. 중심을 잡고 버티는 게 조금 힘들 수 있어요.",
-  금: "쇠 기운이 없어요. 거절하고 정리하는 게 조금 어려울 수 있어요.",
-  수: "물 기운이 없어요. 쉬면서 흘려보내는 게 조금 서툴 수 있어요.",
-};
-const MBTI_TIP: Record<string, string> = {
-  E: "사람을 만나면서 힘을 얻는 편이에요.",
-  I: "혼자 있는 시간에 힘을 채우는 편이에요.",
-  S: "눈앞의 사실과 경험을 믿는 편이에요.",
-  N: "가능성과 의미를 먼저 보는 편이에요.",
-  T: "논리와 해결책으로 판단하는 편이에요.",
-  F: "마음과 관계를 먼저 살피는 편이에요.",
-  J: "계획이 서야 마음이 놓이는 편이에요.",
-  P: "계획을 열어두고 그때그때 정하는 편이에요.",
-};
-
-/** 로딩 화면에 하나씩 보여줄 성향 문장들 (사주 → MBTI 순) */
-export function traitTips(saju: SajuResult | null, mbti: { code: string } | null): string[] {
-  const tips: string[] = [];
-  if (saju) {
-    if (DAY_MASTER_TIP[saju.dayGan]) tips.push(DAY_MASTER_TIP[saju.dayGan]);
-    for (const e of ELEMENTS) {
-      if (saju.elements[e] >= 3) tips.push(STRONG_TIP[e]);
-      else if (saju.elements[e] === 0) tips.push(MISSING_TIP[e]);
-    }
-  }
-  if (mbti) for (const l of mbti.code.split("")) if (MBTI_TIP[l]) tips.push(MBTI_TIP[l]);
-  return tips;
-}
-
 // ── 이번 주 해볼 것 3번: 사주에서 부족한 기운 채우기 ──
 const ELEMENT_NAME: Record<Element, string> = { 목: "나무", 화: "불", 토: "흙", 금: "쇠", 수: "물" };
 
