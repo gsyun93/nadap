@@ -39,6 +39,7 @@
 }
 
 html {
+  color-scheme: light dark; /* 선택 박스 등 기본 컨트롤도 다크 모드에 맞게 */
   -webkit-text-size-adjust: 100%;
   background: var(--c-bg);
 }
