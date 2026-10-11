@@ -76,9 +76,7 @@ export function MbtiGrid({
 export type BirthForm = {
   gender: Gender | null;
   calendar: "solar" | "lunar";
-  year: number | null;
-  month: number | null;
-  day: number | null;
+  dateDigits: string; // 생년월일 숫자 8자리 (입력 중이면 8자리 미만)
   leap: boolean;
   hourIndex: number | null;
   unknownHour: boolean;
@@ -87,17 +85,41 @@ export type BirthForm = {
 export const EMPTY_BIRTH_FORM: BirthForm = {
   gender: null,
   calendar: "solar",
-  year: null,
-  month: null,
-  day: null,
+  dateDigits: "",
   leap: false,
   hourIndex: null,
   unknownHour: false,
 };
 
-const YEARS = Array.from({ length: 2012 - 1940 + 1 }, (_, i) => 2012 - i);
+const MIN_YEAR = 1940;
+const MAX_YEAR = 2012;
 const selectCls =
   "h-12 w-full appearance-none rounded-[12px] border-[1.5px] border-line bg-bg px-3 text-[16px] text-text disabled:opacity-40";
+
+/** 19930517 → 1993.05.17 (입력 중에도 자리에 맞춰 점을 넣는다) */
+function formatDate(d: string): string {
+  if (d.length <= 4) return d;
+  if (d.length <= 6) return `${d.slice(0, 4)}.${d.slice(4)}`;
+  return `${d.slice(0, 4)}.${d.slice(4, 6)}.${d.slice(6)}`;
+}
+
+function parseDigits(d: string) {
+  if (d.length !== 8) return null;
+  return { year: Number(d.slice(0, 4)), month: Number(d.slice(4, 6)), day: Number(d.slice(6, 8)) };
+}
+
+/** 8자리를 다 입력했을 때의 날짜 오류 문구 (문제 없거나 입력 중이면 null) */
+function dateError(form: BirthForm): string | null {
+  const p = parseDigits(form.dateDigits);
+  if (!p) return null;
+  if (p.year < MIN_YEAR || p.year > MAX_YEAR) return `${MIN_YEAR}년부터 ${MAX_YEAR}년 사이로 입력해주세요.`;
+  try {
+    calcSaju({ gender: "남자", calendar: form.calendar, ...p, leap: form.calendar === "lunar" && form.leap, hourIndex: null });
+    return null;
+  } catch (e) {
+    return e instanceof BirthError ? BIRTH_ERROR_TEXT[e.kind] : BIRTH_ERROR_TEXT.solar;
+  }
+}
 
 export function BirthFormScreen({
   form,
@@ -117,30 +139,38 @@ export function BirthFormScreen({
   };
 
   const submit = () => {
-    if (!form.gender || !form.year || !form.month || !form.day) {
+    const date = parseDigits(form.dateDigits);
+    if (!form.gender || !date) {
       setError("성별과 생년월일을 모두 골라주세요.");
+      return;
+    }
+    const dErr = dateError(form);
+    if (dErr) {
+      setError(dErr);
       return;
     }
     if (form.hourIndex === null && !form.unknownHour) {
       setError("태어난 시간을 고르거나 ‘몰라요’에 체크해주세요.");
       return;
     }
-    const b: BirthInput = {
+    onSubmit({
       gender: form.gender,
       calendar: form.calendar,
-      year: form.year,
-      month: form.month,
-      day: form.day,
+      ...date,
       leap: form.calendar === "lunar" && form.leap,
       hourIndex: form.unknownHour ? null : form.hourIndex,
-    };
-    try {
-      calcSaju(b);
-    } catch (e) {
-      setError(e instanceof BirthError ? BIRTH_ERROR_TEXT[e.kind] : BIRTH_ERROR_TEXT.solar);
-      return;
-    }
-    onSubmit(b);
+    });
+  };
+
+  const dateRef = useRef<HTMLInputElement>(null);
+  const liveDateError = dateError(form);
+  const onDateInput = (raw: string) => {
+    let d = raw.replace(/\D/g, "").slice(0, 8);
+    // 점(.)만 지워진 경우엔 숫자 하나를 지운 것으로 처리
+    if (d === form.dateDigits && raw.length < formatDate(form.dateDigits).length) d = d.slice(0, -1);
+    set({ dateDigits: d });
+    // 8자리를 올바르게 다 치면 키패드를 닫아 아래 칸이 보이게
+    if (d.length === 8 && !dateError({ ...form, dateDigits: d })) dateRef.current?.blur();
   };
 
   const num = (v: string) => (v === "" ? null : Number(v));
@@ -179,32 +209,21 @@ export function BirthFormScreen({
         </div>
 
         <div>
-          <div className="grid grid-cols-[1.4fr_1fr_1fr] gap-2">
-            <select aria-label="년" className={selectCls} value={form.year ?? ""} onChange={(e) => set({ year: num(e.target.value) })}>
-              <option value="">년</option>
-              {YEARS.map((y) => (
-                <option key={y} value={y}>
-                  {y}년
-                </option>
-              ))}
-            </select>
-            <select aria-label="월" className={selectCls} value={form.month ?? ""} onChange={(e) => set({ month: num(e.target.value) })}>
-              <option value="">월</option>
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                <option key={m} value={m}>
-                  {m}월
-                </option>
-              ))}
-            </select>
-            <select aria-label="일" className={selectCls} value={form.day ?? ""} onChange={(e) => set({ day: num(e.target.value) })}>
-              <option value="">일</option>
-              {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-                <option key={d} value={d}>
-                  {d}일
-                </option>
-              ))}
-            </select>
-          </div>
+          <input
+            ref={dateRef}
+            type="text"
+            inputMode="numeric"
+            autoComplete="bday"
+            aria-label="생년월일 8자리"
+            aria-invalid={!!liveDateError}
+            placeholder="생년월일 8자리 (예: 19930517)"
+            value={formatDate(form.dateDigits)}
+            onChange={(e) => onDateInput(e.target.value)}
+            className={`h-12 w-full rounded-[12px] border-[1.5px] bg-bg px-4 text-[17px] tracking-wide text-text tabular-nums placeholder:text-[15px] placeholder:tracking-normal placeholder:text-sub/70 focus:outline-none focus-visible:outline-2 focus-visible:outline-blue ${
+              liveDateError ? "border-[#E5484D]" : "border-line focus:border-blue"
+            }`}
+          />
+          {liveDateError && <p className="mt-1.5 text-[13px] font-medium text-[#E5484D]">{liveDateError}</p>}
           {form.calendar === "lunar" && (
             <label className="mt-1 flex min-h-12 items-center gap-2.5 text-[16px]">
               <input type="checkbox" className="size-5 accent-[var(--c-blue)]" checked={form.leap} onChange={(e) => set({ leap: e.target.checked })} />
