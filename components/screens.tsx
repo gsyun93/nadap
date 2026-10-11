@@ -309,13 +309,58 @@ export function parseCards(text: string): Card[] {
   return cards;
 }
 
+/** "할 일. 이유." → 첫 문장(할 일)과 나머지(이유)로 나눈다 */
+function splitAction(text: string): [string, string] {
+  const m = text.match(/^(.+?[.!?。])\s+(.+)$/);
+  return m ? [m[1], m[2]] : [text, ""];
+}
+
 export function ResultCards({ text }: { text: string }) {
   return (
     <div className="flex flex-col gap-3">
       {parseCards(text).map((c, i) => {
         const answer = c.title === "나답의 답";
-        const items = c.lines.filter((l) => /^[-•]\s+/.test(l));
+        const todo = c.title === "이번 주 해볼 것";
+        const items = c.lines.filter((l) => /^[-•]\s+/.test(l)).map((l) => l.replace(/^[-•]\s+/, ""));
         const paras = c.lines.filter((l) => !/^[-•]\s+/.test(l));
+
+        // 이번 주 해볼 것: 결과에서 가장 눈에 띄게 (두꺼운 블루 테두리, 번호, 할 일은 크고 굵게)
+        if (todo) {
+          return (
+            <section
+              key={i}
+              className="mt-2 rounded-[18px] border-2 border-blue px-5 py-5 shadow-[0_8px_24px_-12px_var(--c-blue)]"
+              style={{ background: "color-mix(in srgb, var(--c-blue) 7%, var(--c-bg))" }}
+            >
+              <h2 className="mb-3 text-[17px] font-bold text-blue">{c.title}</h2>
+              {paras.map((p, j) => (
+                <p key={j} className="mb-2 text-[16px] leading-[1.7]">
+                  {p}
+                </p>
+              ))}
+              <ol className="flex flex-col gap-3">
+                {items.map((it, j) => {
+                  const [action, reason] = splitAction(it);
+                  return (
+                    <li key={j} className="flex gap-3 rounded-[14px] bg-bg px-4 py-3.5">
+                      <span
+                        aria-hidden
+                        className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-blue text-[14px] font-bold text-white"
+                      >
+                        {j + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[17px] leading-[1.5] font-bold">{action}</p>
+                        {reason && <p className="mt-1 text-[15px] leading-[1.65] text-sub">{reason}</p>}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          );
+        }
+
         return (
           <section key={i} className={`rounded-[16px] px-5 py-5 ${answer ? "bg-blue text-white" : "bg-surface"}`}>
             <h2 className={`mb-2 text-[14px] font-bold ${answer ? "text-white/80" : "text-blue"}`}>{c.title}</h2>
@@ -331,7 +376,7 @@ export function ResultCards({ text }: { text: string }) {
                     <span aria-hidden className={answer ? "text-white" : "text-blue"}>
                       •
                     </span>
-                    <span>{it.replace(/^[-•]\s+/, "")}</span>
+                    <span>{it}</span>
                   </li>
                 ))}
               </ul>
