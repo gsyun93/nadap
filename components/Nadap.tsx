@@ -17,11 +17,13 @@ import {
 import { fixedCount, limitsFromFixed, needsRel, progressPercent, shouldFinish } from "@/lib/flow";
 import { answerText, buildQuestionPrompt, concernText, mindText } from "@/lib/prompts";
 import { calcAge, calcSaju, type BirthInput } from "@/lib/saju";
+import { traitTips } from "@/lib/traits";
 import { branchKey, loadBranch, TREE_DEPTH, treeFocus } from "@/lib/tree";
 import type { Answer, GeneratedQuestion, Profile, QA } from "@/lib/types";
 import { Logo } from "./Logo";
 import { BirthFormScreen, EMPTY_BIRTH_FORM, MbtiGrid, ResultCards, type BirthForm } from "./screens";
-import { ChoiceList, Header, PrimaryButton, QuestionSkeleton, QuestionTitle } from "./ui";
+import { isHeavyAnswer, RECAP_MIN_SHOW, RecapLoading, type RecapMode } from "./Recap";
+import { ChoiceList, Header, PrimaryButton, QuestionTitle } from "./ui";
 
 type Screen =
   | { t: "start" }
@@ -68,8 +70,6 @@ const INITIAL: State = {
 };
 
 class RateLimitError extends Error {}
-/** 한 번에 4개 만들기가 실패했거나 그 보기 자리가 비어 있음 → 1개씩 다시 요청 */
-class PrefetchMiss extends Error {}
 
 const sameAnswer = (a: Answer | null, b: Answer | null) => JSON.stringify(a) === JSON.stringify(b);
 const asFixed = (f: FixedQuestion, last = false): GeneratedQuestion => ({ ...f, options: [...f.options], last });
@@ -111,8 +111,10 @@ export default function Nadap() {
   const navToken = useRef(0);
   // 질문 캐시 (키 = 프롬프트 전체 문자열)
   const cache = useRef(new Map<string, Promise<GeneratedQuestion>>());
-  // 호출 한도(429)에 걸리면 미리 만들기를 끈다
-  const prefetchOff = useRef(false);
+  // 회고 로딩 화면: 몇 번째 기다림인지, 다음에 보여줄 성향 조각, 마지막 숨 고르기, 보이기 시작한 시각
+  const recap = useRef({ waits: 0, tipCursor: 0, lastBreath: -10 });
+  const [recapPlan, setRecapPlan] = useState<{ i: number; mode: RecapMode; tip: string | null } | null>(null);
+  const recapShownAt = useRef<number | null>(null);
 
   const push = useCallback((sc: Screen) => {
     navToken.current++;
@@ -131,20 +133,16 @@ export default function Nadap() {
 
   // ── 질문 요청 ──
   const requestQuestion = useCallback(
-    (profile: Profile, history: QA[], prefetch: boolean): Promise<GeneratedQuestion> | null => {
+    (profile: Profile, history: QA[]): Promise<GeneratedQuestion> => {
       const key = buildQuestionPrompt(profile, history);
       const hit = cache.current.get(key);
       if (hit) return hit;
-      if (prefetch && prefetchOff.current) return null;
       const p = fetch("/api/question", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ profile, history }),
       }).then(async (r) => {
-        if (r.status === 429) {
-          prefetchOff.current = true;
-          throw new RateLimitError();
-        }
+        if (r.status === 429) throw new RateLimitError();
         if (!r.ok) throw new Error(`question ${r.status}`);
         return (await r.json()) as GeneratedQuestion;
       });
@@ -161,62 +159,17 @@ export default function Nadap() {
   const profile = useMemo(() => toProfile(s), [s]);
   const limits = useMemo(() => (profile ? limitsFromFixed(fixedCount(profile)) : { min: 8, max: 12 }), [profile]);
 
-  /**
-   * 보기 4개 각각을 골랐을 때의 다음 질문을 AI 호출 1번으로 한꺼번에 미리 만든다.
-   * 결과는 보기별로 나눠 캐시에 넣어서(키 = 그 보기를 골랐을 때의 프롬프트 전체 문자열), 고르는 순간 바로 꺼내 쓴다.
-   */
-  const prefetchBatch = useCallback((profile: Profile, base: QA[], cur: GeneratedQuestion) => {
-    if (prefetchOff.current) return;
-    const missing = cur.options
-      .map((opt, i) => ({
-        i,
-        key: buildQuestionPrompt(profile, [...base, { question: cur.question, answer: opt, focus: cur.focus }]),
-      }))
-      .filter(({ key }) => !cache.current.has(key));
-    if (missing.length === 0) return;
-
-    const batch = fetch("/api/question", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        profile,
-        history: base,
-        current: { question: cur.question, options: cur.options, focus: cur.focus },
-      }),
-    }).then(async (r) => {
-      if (r.status === 429) prefetchOff.current = true;
-      if (!r.ok) throw new PrefetchMiss();
-      return ((await r.json()) as { questions: (GeneratedQuestion | null)[] }).questions;
-    });
-
-    for (const { i, key } of missing) {
-      const p = batch.then(
-        (list) => {
-          const q = list?.[i];
-          if (!q) throw new PrefetchMiss();
-          return q;
-        },
-        () => {
-          throw new PrefetchMiss();
-        },
-      );
-      cache.current.set(key, p);
-      // 실패하면 캐시에서 지워, 그 보기를 고를 때 1개씩 다시 요청하게
-      p.catch(() => {
-        if (cache.current.get(key) === p) cache.current.delete(key);
-      });
+  // 회고 화면의 "성향 한 조각" 문장들 (사주·MBTI에서 코드로 뽑음)
+  const tips = useMemo(() => {
+    if (!profile) return [];
+    let saju = null;
+    try {
+      saju = profile.birth ? calcSaju(profile.birth) : null;
+    } catch {
+      saju = null;
     }
-  }, []);
-
-  // 질문이 화면에 뜨는 순간, 보기 4개 각각을 골랐을 때의 다음 질문을 미리 요청 (호출 1번)
-  useEffect(() => {
-    if (screen.t !== "custom" || !profile) return;
-    const item = s.custom[screen.i];
-    if (!item) return;
-    if (shouldFinish(screen.i, item.q.last, limits, item.fallback)) return;
-    if (item.node && screen.i + 1 < TREE_DEPTH) return; // 다음 질문은 트리에서 꺼낸다
-    prefetchBatch(profile, historyOf(s.custom, screen.i - 1), item.q);
-  }, [screen, s.custom, profile, limits, prefetchBatch]);
+    return traitTips(saju, profile.mbti);
+  }, [profile]);
 
   /** 맞춤 질문 i번째 다음 질문을 AI로 만든다 (실패하면 예비 질문) */
   const fillNextFromAI = useCallback(
@@ -225,6 +178,14 @@ export default function Nadap() {
       if (!p) return;
       const history = historyOf(state.custom, i);
       const usedTexts = new Set(state.custom.map((c) => c.q.question));
+
+      /** 회고 화면이 떴다면 최소 시간은 보여준 뒤 다음 질문으로 */
+      const reveal = (fn: () => void) => {
+        const at = recapShownAt.current;
+        const wait = at === null ? 0 : Math.max(0, RECAP_MIN_SHOW - (Date.now() - at));
+        if (wait === 0) return fn();
+        setTimeout(() => navToken.current === token && fn(), wait);
+      };
 
       const applyFallback = () => {
         if (navToken.current !== token) return;
@@ -236,22 +197,22 @@ export default function Nadap() {
           setStack((st) => [...st.slice(0, -1), { t: "tone" }]);
           return;
         }
-        setS((cur) => ({ ...cur, custom: [...cur.custom.slice(0, i + 1), { q: asFixed(fb), fallback: true, ans: null }] }));
+        reveal(() =>
+          setS((cur) => ({ ...cur, custom: [...cur.custom.slice(0, i + 1), { q: asFixed(fb), fallback: true, ans: null }] })),
+        );
       };
 
       // 호출 한도(429)면 잠깐 기다렸다가 최대 3번 다시 시도, 그래도 안 되면 예비 질문
       const attempt = (n: number) => {
-        const req = requestQuestion(p, history, false);
-        if (!req) return applyFallback();
-        req.then(
+        requestQuestion(p, history).then(
           (q) => {
             if (navToken.current !== token) return;
-            setS((cur) => ({ ...cur, custom: [...cur.custom.slice(0, i + 1), { q, fallback: false, ans: null }] }));
+            reveal(() =>
+              setS((cur) => ({ ...cur, custom: [...cur.custom.slice(0, i + 1), { q, fallback: false, ans: null }] })),
+            );
           },
           (err) => {
             if (navToken.current !== token) return;
-            // 미리 만들기가 비었으면 이 보기 하나만 바로 다시 요청
-            if (err instanceof PrefetchMiss) return attempt(n);
             if (err instanceof RateLimitError && n < 3) {
               setTimeout(() => navToken.current === token && attempt(n + 1), 2500 * (n + 1));
             } else applyFallback();
@@ -261,6 +222,28 @@ export default function Nadap() {
       attempt(0);
     },
     [requestQuestion],
+  );
+
+  /**
+   * AI로 다음 질문을 기다릴 때 보여줄 회고 화면 정하기 (실제로 AI를 기다릴 때만 센다)
+   * 대부분 노트, 3번에 한 번 성향 한 조각, 무거운 답 뒤엔 숨 고르기 (숨 고르기는 3번에 한 번까지)
+   */
+  const planRecap = useCallback(
+    (state: State, i: number) => {
+      const r = recap.current;
+      r.waits += 1;
+      const it = state.custom[i];
+      const latest = it?.ans ? answerText(it.ans, it.q.options) : "";
+      let mode: RecapMode = "note";
+      if (isHeavyAnswer(latest) && r.waits - r.lastBreath >= 3) {
+        mode = "breath";
+        r.lastBreath = r.waits;
+      } else if (r.waits % 3 === 2 && tips.length > 0) mode = "tip";
+      const tip = mode === "tip" ? tips[r.tipCursor++ % tips.length] : null;
+      recapShownAt.current = null;
+      setRecapPlan({ i: i + 1, mode, tip });
+    },
+    [tips],
   );
 
   /** 맞춤 질문 i번째 다음 질문을 준비해서 i+1 화면으로 */
@@ -281,20 +264,27 @@ export default function Nadap() {
             if (navToken.current !== token) return;
             const childId = branch.nodes[nodeId]?.n?.[ansIndex];
             const child = childId ? branch.nodes[childId] : undefined;
-            if (!childId || !child) return fillNextFromAI(state, i, token);
+            if (!childId || !child) {
+              planRecap(state, i);
+              return fillNextFromAI(state, i, token);
+            }
             const q: GeneratedQuestion = { question: child.q, options: child.o, focus: treeFocus(i + 1), last: false };
             setS((cur) => ({
               ...cur,
               custom: [...cur.custom.slice(0, i + 1), { q, fallback: false, ans: null, node: childId }],
             }));
           },
-          () => fillNextFromAI(state, i, token),
+          () => {
+            planRecap(state, i);
+            fillNextFromAI(state, i, token);
+          },
         );
         return;
       }
+      planRecap(state, i);
       fillNextFromAI(state, i, token);
     },
-    [push, fillNextFromAI],
+    [push, fillNextFromAI, planRecap],
   );
 
   // ── 답 처리 ──
@@ -399,7 +389,8 @@ export default function Nadap() {
   const restart = () => {
     navToken.current++;
     cache.current.clear();
-    prefetchOff.current = false;
+    recap.current = { waits: 0, tipCursor: 0, lastBreath: -10 };
+    setRecapPlan(null);
     setS(INITIAL);
     setStack([{ t: "start" }]);
   };
@@ -514,7 +505,14 @@ export default function Nadap() {
           />
         </>
       ) : (
-        <QuestionSkeleton />
+        <RecapLoading
+          mode={recapPlan?.i === screen.i ? recapPlan.mode : "note"}
+          tip={recapPlan?.i === screen.i ? recapPlan.tip : null}
+          answers={historyOf(s.custom, screen.i - 1).filter((h) => h.answer)}
+          onVisible={() => {
+            recapShownAt.current = Date.now();
+          }}
+        />
       );
       break;
     }

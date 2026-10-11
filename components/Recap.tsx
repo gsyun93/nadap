@@ -1,0 +1,159 @@
+"use client";
+// 다음 질문을 만드는 동안 보여주는 회고 화면 (AI 호출 없음, 비용 0원)
+//  - note:   상담가 노트에 지금까지의 답이 적히고, 방금 고른 답이 한 글자씩 써진다
+//  - tip:    노트 + 사주·MBTI "성향 한 조각"
+//  - breath: 무거운 답 다음에 숨 고르기
+import { useEffect, useState, useSyncExternalStore } from "react";
+
+export type RecapMode = "note" | "tip" | "breath";
+
+/** 이 시간 안에 질문이 오면 회고 화면을 아예 보여주지 않는다 */
+export const RECAP_DELAY = 300;
+/** 한번 보였으면 최소 이만큼은 보여준다 (깜빡임 방지) */
+export const RECAP_MIN_SHOW = 800;
+
+const WAIT_TEXT = "당신에게 맞는 질문을 고르는 중이에요…";
+
+const REDUCE_QUERY = "(prefers-reduced-motion: reduce)";
+function subscribeReduce(cb: () => void) {
+  const m = window.matchMedia(REDUCE_QUERY);
+  m.addEventListener("change", cb);
+  return () => m.removeEventListener("change", cb);
+}
+function usePrefersReducedMotion() {
+  return useSyncExternalStore(
+    subscribeReduce,
+    () => window.matchMedia(REDUCE_QUERY).matches,
+    () => false,
+  );
+}
+
+/** 방금 고른 답을 한 글자씩 적는다 */
+function Typewriter({ text, instant }: { text: string; instant: boolean }) {
+  const [n, setN] = useState(instant ? text.length : 0);
+  useEffect(() => {
+    if (instant) return;
+    const t = setInterval(() => setN((v) => (v >= text.length ? v : v + 1)), 45);
+    return () => clearInterval(t);
+  }, [text, instant]);
+  return (
+    <>
+      {text.slice(0, n)}
+      {n < text.length && <span className="ml-px inline-block h-[1.1em] w-[2px] translate-y-[3px] animate-pulse bg-blue" />}
+    </>
+  );
+}
+
+export type RecapItem = { question: string; answer: string };
+
+function Note({ answers, compact, reduce }: { answers: RecapItem[]; compact: boolean; reduce: boolean }) {
+  const shown = answers.slice(compact ? -3 : -5);
+  const older = shown.slice(0, -1);
+  const latest = shown[shown.length - 1];
+  return (
+    <div className="rounded-[16px] border border-line bg-surface px-5 py-4">
+      <p className="mb-2.5 text-[13px] font-bold text-blue">상담가 노트</p>
+      <ul className="flex flex-col gap-2 text-[16px] leading-[1.5]">
+        {older.map((a, i) => (
+          <li key={i} className="flex gap-2 text-sub" style={{ opacity: 0.55 + (0.45 * (i + 1)) / (older.length + 1) }}>
+            <span aria-hidden>·</span>
+            <span>{a.answer}</span>
+          </li>
+        ))}
+        {latest && (
+          <li className="flex gap-2 font-medium text-text">
+            <span aria-hidden className="text-blue">
+              ·
+            </span>
+            <span>
+              {/* 방금 답은 어떤 질문에 대한 답인지 작게 함께 */}
+              <span className="block text-[12px] font-normal text-sub">{latest.question}</span>
+              <Typewriter text={latest.answer} instant={reduce} />
+            </span>
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+function Breath({ reduce }: { reduce: boolean }) {
+  return (
+    <div className="flex flex-col items-center py-10">
+      <div
+        aria-hidden
+        className="size-28 rounded-full"
+        style={{
+          background: "color-mix(in srgb, var(--c-blue) 18%, var(--c-bg))",
+          animation: reduce ? undefined : "nadap-breath 4s ease-in-out infinite",
+        }}
+      />
+      <p className="mt-8 text-[20px] font-bold">숨 한 번 크게 쉬어요</p>
+      <p className="mt-2 text-[15px] text-sub">천천히 들이쉬고, 천천히 내쉬어요</p>
+    </div>
+  );
+}
+
+export function RecapLoading({
+  mode,
+  answers,
+  tip,
+  onVisible,
+}: {
+  mode: RecapMode;
+  answers: RecapItem[]; // 지금까지의 질문과 답 (오래된 것 → 방금 고른 것)
+  tip: string | null;
+  onVisible: () => void;
+}) {
+  const [show, setShow] = useState(false);
+  const reduce = usePrefersReducedMotion();
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setShow(true);
+      onVisible();
+    }, RECAP_DELAY);
+    return () => clearTimeout(t);
+    // 처음 한 번만 (보이기 시작한 시각을 알린다)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!show) return null;
+
+  return (
+    <div aria-busy="true" aria-live="polite" className="animate-[nadap-fade_300ms_ease-out]">
+      {mode === "breath" ? (
+        <Breath reduce={reduce} />
+      ) : (
+        <>
+          <p className="mb-2 text-[14px] font-medium text-blue">지금까지 들은 이야기</p>
+          <Note answers={answers} compact={mode === "tip"} reduce={reduce} />
+          {mode === "tip" && tip && (
+            <div className="mt-3 rounded-[16px] border-[1.5px] border-blue/40 px-5 py-4">
+              <p className="mb-1.5 text-[13px] font-bold text-blue">당신의 성향 한 조각</p>
+              <p className="text-[16px] leading-[1.6] font-medium">{tip}</p>
+              <p className="mt-2 text-[13px] text-sub">이 성향이 지금 고민과 어떻게 닿아 있는지 결과에서 풀어드릴게요.</p>
+            </div>
+          )}
+        </>
+      )}
+      <p className="mt-6 flex items-center justify-center gap-2 text-[14px] text-sub">
+        <span aria-hidden className="flex gap-1">
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className="size-1.5 rounded-full bg-blue"
+              style={{ animation: reduce ? undefined : `nadap-dot 1.2s ${i * 0.2}s ease-in-out infinite` }}
+            />
+          ))}
+        </span>
+        {WAIT_TEXT}
+      </p>
+    </div>
+  );
+}
+
+/** 무거운 답인지 (숨 고르기를 보여줄지) */
+export function isHeavyAnswer(text: string): boolean {
+  return /지쳐|지친|힘들|무서|불안|우울|막막|외로|눈물|버거|포기|괴로|무기력|숨이 막|잠이 안/.test(text);
+}

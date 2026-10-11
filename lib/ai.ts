@@ -91,14 +91,6 @@ const QUESTION_JSON_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-/** 보기 4개 각각의 다음 질문을 한 번에: {"next":[질문 ×4]} */
-const BATCH_JSON_SCHEMA = {
-  type: "object",
-  properties: { next: { type: "array", items: QUESTION_JSON_SCHEMA } },
-  required: ["next"],
-  additionalProperties: false,
-} as const;
-
 const GEMINI_QUESTION_SCHEMA = {
   type: Type.OBJECT,
   properties: {
@@ -109,40 +101,31 @@ const GEMINI_QUESTION_SCHEMA = {
   },
   required: ["question", "options", "focus", "last"],
 };
-const GEMINI_BATCH_SCHEMA = {
-  type: Type.OBJECT,
-  properties: { next: { type: Type.ARRAY, items: GEMINI_QUESTION_SCHEMA } },
-  required: ["next"],
-};
-
-/**
- * 질문용 모델 호출 → 파싱된 JSON (검증은 호출하는 쪽에서). 회사 쪽 일시 오류(5xx)면 한 번 더 시도
- * batch = true면 다음 질문 4개를 한 번에 ({"next":[...]})
- */
-export async function generateQuestionJSON(prompt: string, batch = false): Promise<unknown> {
+/** 질문용 모델 호출 → 파싱된 JSON (검증은 호출하는 쪽에서). 회사 쪽 일시 오류(5xx)면 한 번 더 시도 */
+export async function generateQuestionJSON(prompt: string): Promise<unknown> {
   try {
-    return await generateQuestionOnce(prompt, batch);
+    return await generateQuestionOnce(prompt);
   } catch (err) {
-    if (err instanceof AIError && err.serverError) return generateQuestionOnce(prompt, batch);
+    if (err instanceof AIError && err.serverError) return generateQuestionOnce(prompt);
     throw err;
   }
 }
 
-async function generateQuestionOnce(prompt: string, batch: boolean): Promise<unknown> {
+async function generateQuestionOnce(prompt: string): Promise<unknown> {
   const c = getConfig("QUESTION");
   if (!c) throw new AIError("no_key");
-  const timeout = batch ? 30_000 : 20_000;
+  const timeout = 20_000;
   try {
     let text = "";
     if (c.provider === "anthropic") {
       const res = await anthropic(c, timeout, 0).messages.create({
         model: c.model,
-        max_tokens: batch ? 3000 : 1024,
+        max_tokens: 1024,
         // Haiku는 생각하기를 꺼서 빠르게, 그 외 모델은 생각하기를 끌 수 없어 노력 수준을 낮춘다
         ...(c.model.includes("haiku") ? { thinking: { type: "disabled" as const } } : {}),
         output_config: {
           ...(c.model.includes("haiku") ? {} : { effort: "low" as const }),
-          format: { type: "json_schema", schema: batch ? BATCH_JSON_SCHEMA : QUESTION_JSON_SCHEMA },
+          format: { type: "json_schema", schema: QUESTION_JSON_SCHEMA },
         },
         messages: [{ role: "user", content: prompt }],
       });
@@ -153,7 +136,7 @@ async function generateQuestionOnce(prompt: string, batch: boolean): Promise<unk
         contents: prompt,
         config: {
           responseMimeType: "application/json",
-          responseSchema: batch ? GEMINI_BATCH_SCHEMA : GEMINI_QUESTION_SCHEMA,
+          responseSchema: GEMINI_QUESTION_SCHEMA,
           // Gemini 3 이상은 생각하기를 최소로 (속도 우선)
           ...(/gemini-[3-9]/.test(c.model) ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : {}),
           abortSignal: AbortSignal.timeout(timeout),
@@ -171,7 +154,7 @@ async function generateQuestionOnce(prompt: string, batch: boolean): Promise<unk
     return JSON.parse(stripFence(text));
   } catch (err) {
     if (err instanceof SyntaxError) throw new AIError("bad_json");
-    throw toAIError(err, batch ? "question-batch" : "question");
+    throw toAIError(err, "question");
   }
 }
 

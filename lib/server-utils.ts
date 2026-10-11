@@ -105,17 +105,6 @@ export function parseHistory(v: unknown, maxItems: number): QA[] | null {
   return out;
 }
 
-/** 한 번에 4개 만들기용: 지금 화면에 떠 있는 질문 */
-export function parseCurrent(v: unknown): { question: string; options: string[]; focus: string } | null {
-  if (!isObj(v)) return null;
-  const question = cleanText(v.question, 120);
-  if (!question || !Array.isArray(v.options) || v.options.length < 2 || v.options.length > 4) return null;
-  const options = v.options.map((o) => cleanText(o, 80));
-  if (options.some((o) => o === null)) return null;
-  const focus = typeof v.focus === "string" ? v.focus.trim().slice(0, 60) : "";
-  return { question, options: options as string[], focus };
-}
-
 export function parseTone(v: unknown): number | null {
   return isInt(v, 0, TONES.length - 1) ? v : null;
 }
